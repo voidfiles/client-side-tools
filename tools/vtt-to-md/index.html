@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTT to Transcript Converter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        h1 {
+            margin-bottom: 0.5rem;
+            color: #1a1a1a;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: #444;
+        }
+
+        textarea {
+            width: 100%;
+            height: 400px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #0066cc;
+            box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
+        }
+
+        .output-area {
+            width: 100%;
+            height: 400px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+            overflow-y: auto;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        button {
+            padding: 0.6rem 1.2rem;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+        }
+
+        .btn-secondary {
+            background: #e5e5e5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d5d5d5;
+        }
+
+        .status {
+            margin-top: 0.75rem;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status.success {
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>VTT to Transcript Converter</h1>
+    <p class="subtitle">Paste WEBVTT content to convert it into a clean, speaker-grouped transcript.</p>
+
+    <div class="container">
+        <div class="panel">
+            <h2>Input (WEBVTT)</h2>
+            <textarea id="input" placeholder="Paste your WEBVTT content here..."></textarea>
+            <div class="actions">
+                <button class="btn-primary" onclick="convert()">Convert</button>
+                <button class="btn-secondary" onclick="clearInput()">Clear</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Output (Clean Transcript)</h2>
+            <div id="output" class="output-area"></div>
+            <div class="actions">
+                <button class="btn-primary" onclick="copyOutput()">Copy to Clipboard</button>
+            </div>
+            <div id="status" class="status"></div>
+        </div>
+    </div>
+
+    <script>
+        function parseVTT(vttContent) {
+            const lines = vttContent.split('\n');
+            const entries = [];
+            let currentEntry = null;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                // Skip WEBVTT header and empty lines
+                if (line === 'WEBVTT' || line === '') {
+                    continue;
+                }
+
+                // Skip cue numbers (just digits)
+                if (/^\d+$/.test(line)) {
+                    continue;
+                }
+
+                // Skip timestamp lines
+                if (line.includes('-->')) {
+                    continue;
+                }
+
+                // This is actual content
+                if (line) {
+                    // Check if line starts with a speaker label (Name: or Name (something):)
+                    const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
+
+                    if (speakerMatch) {
+                        const speaker = speakerMatch[1].trim();
+                        const text = speakerMatch[2].trim();
+
+                        entries.push({
+                            speaker: speaker,
+                            text: text
+                        });
+                    } else if (entries.length > 0) {
+                        // Continuation of previous entry without speaker label
+                        entries[entries.length - 1].text += ' ' + line;
+                    }
+                }
+            }
+
+            return entries;
+        }
+
+        function groupBySpeaker(entries) {
+            if (entries.length === 0) return [];
+
+            const grouped = [];
+            let currentGroup = {
+                speaker: entries[0].speaker,
+                text: entries[0].text
+            };
+
+            for (let i = 1; i < entries.length; i++) {
+                const entry = entries[i];
+
+                if (entry.speaker === currentGroup.speaker) {
+                    // Same speaker, append text
+                    if (currentGroup.text && entry.text) {
+                        currentGroup.text += ' ' + entry.text;
+                    } else if (entry.text) {
+                        currentGroup.text = entry.text;
+                    }
+                } else {
+                    // Different speaker, save current group and start new one
+                    if (currentGroup.text) {
+                        grouped.push(currentGroup);
+                    }
+                    currentGroup = {
+                        speaker: entry.speaker,
+                        text: entry.text
+                    };
+                }
+            }
+
+            // Don't forget the last group
+            if (currentGroup.text) {
+                grouped.push(currentGroup);
+            }
+
+            return grouped;
+        }
+
+        function formatOutput(grouped) {
+            return grouped
+                .map(g => `${g.speaker}: ${g.text}`)
+                .join('\n\n');
+        }
+
+        function convert() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+            const status = document.getElementById('status');
+
+            if (!input.trim()) {
+                output.textContent = '';
+                status.textContent = 'Please paste some WEBVTT content.';
+                status.className = 'status';
+                return;
+            }
+
+            try {
+                const entries = parseVTT(input);
+                const grouped = groupBySpeaker(entries);
+                const result = formatOutput(grouped);
+
+                output.textContent = result;
+                status.textContent = `Converted ${entries.length} captions into ${grouped.length} speaker segments.`;
+                status.className = 'status success';
+            } catch (e) {
+                output.textContent = 'Error parsing VTT content.';
+                status.textContent = 'Error: ' + e.message;
+                status.className = 'status';
+            }
+        }
+
+        function clearInput() {
+            document.getElementById('input').value = '';
+            document.getElementById('output').textContent = '';
+            document.getElementById('status').textContent = '';
+        }
+
+        function copyOutput() {
+            const output = document.getElementById('output').textContent;
+            const status = document.getElementById('status');
+
+            if (!output) {
+                status.textContent = 'Nothing to copy.';
+                status.className = 'status';
+                return;
+            }
+
+            navigator.clipboard.writeText(output).then(() => {
+                status.textContent = 'Copied to clipboard!';
+                status.className = 'status success';
+            }).catch(() => {
+                status.textContent = 'Failed to copy.';
+                status.className = 'status';
+            });
+        }
+
+        // Auto-convert on paste
+        document.getElementById('input').addEventListener('paste', () => {
+            setTimeout(convert, 100);
+        });
+    </script>
+</body>
+</html>

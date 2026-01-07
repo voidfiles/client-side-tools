@@ -8,5 +8,10 @@
     "id": "json-formatter",
     "name": "JSON Formatter",
     "description": "Format, validate, and beautify JSON data"
+  },
+  {
+    "id": "vtt-to-md",
+    "name": "VTT to Markdown",
+    "description": "Convert WEBVTT subtitle files into clean, speaker-grouped transcripts"
   }
 ]
