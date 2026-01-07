@@ -42,38 +42,43 @@
             opacity: 0.9;
         }
 
-        .tools-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-top: 2rem;
-        }
-
-        .tool-card {
+        .tools-list {
             background: white;
             border-radius: 12px;
             padding: 2rem;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            max-width: 800px;
+            margin: 2rem auto;
+        }
+
+        .tool-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid #e0e0e0;
             text-decoration: none;
             color: #333;
             display: block;
+            transition: background-color 0.2s ease;
         }
 
-        .tool-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        .tool-item:last-child {
+            border-bottom: none;
         }
 
-        .tool-card h2 {
+        .tool-item:hover {
+            background-color: #f5f5f5;
+            padding-left: 1rem;
+        }
+
+        .tool-item h2 {
             color: #667eea;
-            margin-bottom: 1rem;
-            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 1.3rem;
         }
 
-        .tool-card p {
+        .tool-item p {
             color: #666;
             line-height: 1.5;
+            font-size: 0.95rem;
         }
 
         .loading {
@@ -132,13 +137,13 @@
                     return;
                 }
 
-                const grid = document.createElement('div');
-                grid.className = 'tools-grid';
+                const list = document.createElement('div');
+                list.className = 'tools-list';
 
                 tools.forEach(tool => {
-                    const card = document.createElement('a');
-                    card.className = 'tool-card';
-                    card.href = `tools/${tool.id}/`;
+                    const item = document.createElement('a');
+                    item.className = 'tool-item';
+                    item.href = `tools/${tool.id}/`;
 
                     const title = document.createElement('h2');
                     title.textContent = tool.name;
@@ -146,13 +151,13 @@
                     const description = document.createElement('p');
                     description.textContent = tool.description;
 
-                    card.appendChild(title);
-                    card.appendChild(description);
-                    grid.appendChild(card);
+                    item.appendChild(title);
+                    item.appendChild(description);
+                    list.appendChild(item);
                 });
 
                 container.innerHTML = '';
-                container.appendChild(grid);
+                container.appendChild(list);
             } catch (error) {
                 container.innerHTML = `<div class="error">Error loading tools: ${error.message}</div>`;
                 console.error('Failed to load tools:', error);
