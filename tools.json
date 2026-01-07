@@ -1,0 +1,12 @@
+[
+  {
+    "id": "color-picker",
+    "name": "Color Picker",
+    "description": "Pick and convert colors between HEX, RGB, and HSL formats"
+  },
+  {
+    "id": "json-formatter",
+    "name": "JSON Formatter",
+    "description": "Format, validate, and beautify JSON data"
+  }
+]

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Picker - Client-Side Tools</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .back-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .color-display {
+            width: 100%;
+            height: 200px;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 2px solid #ddd;
+            transition: background-color 0.3s ease;
+        }
+
+        .picker-section {
+            margin-bottom: 2rem;
+        }
+
+        .picker-section label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .color-input {
+            width: 100%;
+            height: 60px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .formats {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .format-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .format-group label {
+            min-width: 60px;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .format-group input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 1rem;
+        }
+
+        .format-group button {
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+
+        .format-group button:hover {
+            background: #5568d3;
+        }
+
+        .copied {
+            background: #51cf66 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../" class="back-link">← Back to Tools</a>
+
+        <header>
+            <h1>🎨 Color Picker</h1>
+            <p>Pick and convert colors between different formats</p>
+        </header>
+
+        <div class="color-display" id="colorDisplay"></div>
+
+        <div class="picker-section">
+            <label for="colorPicker">Pick a Color:</label>
+            <input type="color" id="colorPicker" class="color-input" value="#667eea">
+        </div>
+
+        <div class="formats">
+            <div class="format-group">
+                <label>HEX:</label>
+                <input type="text" id="hexInput" readonly>
+                <button onclick="copyToClipboard('hexInput', this)">Copy</button>
+            </div>
+            <div class="format-group">
+                <label>RGB:</label>
+                <input type="text" id="rgbInput" readonly>
+                <button onclick="copyToClipboard('rgbInput', this)">Copy</button>
+            </div>
+            <div class="format-group">
+                <label>HSL:</label>
+                <input type="text" id="hslInput" readonly>
+                <button onclick="copyToClipboard('hslInput', this)">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const colorPicker = document.getElementById('colorPicker');
+        const colorDisplay = document.getElementById('colorDisplay');
+        const hexInput = document.getElementById('hexInput');
+        const rgbInput = document.getElementById('rgbInput');
+        const hslInput = document.getElementById('hslInput');
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function rgbToHsl(r, g, b) {
+            r /= 255;
+            g /= 255;
+            b /= 255;
+
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+
+            if (max === min) {
+                h = s = 0;
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+                switch (max) {
+                    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                    case g: h = ((b - r) / d + 2) / 6; break;
+                    case b: h = ((r - g) / d + 4) / 6; break;
+                }
+            }
+
+            return {
+                h: Math.round(h * 360),
+                s: Math.round(s * 100),
+                l: Math.round(l * 100)
+            };
+        }
+
+        function updateColor(hex) {
+            colorDisplay.style.backgroundColor = hex;
+            hexInput.value = hex.toUpperCase();
+
+            const rgb = hexToRgb(hex);
+            if (rgb) {
+                rgbInput.value = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+
+                const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+                hslInput.value = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+            }
+        }
+
+        colorPicker.addEventListener('input', (e) => {
+            updateColor(e.target.value);
+        });
+
+        async function copyToClipboard(inputId, button) {
+            const input = document.getElementById(inputId);
+            try {
+                await navigator.clipboard.writeText(input.value);
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        }
+
+        // Initialize with default color
+        updateColor(colorPicker.value);
+    </script>
+</body>
+</html>

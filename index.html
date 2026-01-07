@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client-Side Tools</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .tool-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-decoration: none;
+            color: #333;
+            display: block;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .tool-card h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .tool-card p {
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            padding: 2rem;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 4rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛠️ Client-Side Tools</h1>
+            <p class="subtitle">A collection of useful browser-based utilities</p>
+        </header>
+
+        <div id="tools-container">
+            <div class="loading">Loading tools...</div>
+        </div>
+
+        <footer>
+            <p>All tools run entirely in your browser. No data is sent to any server.</p>
+        </footer>
+    </div>
+
+    <script>
+        async function loadTools() {
+            const container = document.getElementById('tools-container');
+
+            try {
+                const response = await fetch('tools.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load tools manifest');
+                }
+
+                const tools = await response.json();
+
+                if (tools.length === 0) {
+                    container.innerHTML = '<div class="loading">No tools available yet. Check back soon!</div>';
+                    return;
+                }
+
+                const grid = document.createElement('div');
+                grid.className = 'tools-grid';
+
+                tools.forEach(tool => {
+                    const card = document.createElement('a');
+                    card.className = 'tool-card';
+                    card.href = `tools/${tool.id}/`;
+
+                    const title = document.createElement('h2');
+                    title.textContent = tool.name;
+
+                    const description = document.createElement('p');
+                    description.textContent = tool.description;
+
+                    card.appendChild(title);
+                    card.appendChild(description);
+                    grid.appendChild(card);
+                });
+
+                container.innerHTML = '';
+                container.appendChild(grid);
+            } catch (error) {
+                container.innerHTML = `<div class="error">Error loading tools: ${error.message}</div>`;
+                console.error('Failed to load tools:', error);
+            }
+        }
+
+        loadTools();
+    </script>
+</body>
+</html>
