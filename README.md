@@ -81,6 +81,32 @@ Each tool should be a standalone HTML file with inline CSS and JavaScript. Here'
 
 Simply open `index.html` in your browser to see the tools list. Each tool runs independently with no build process required.
 
+## Deployment
+
+This project is set up to automatically deploy to GitHub Pages.
+
+### Initial Setup
+
+1. Go to your repository settings on GitHub
+2. Navigate to **Settings** → **Pages**
+3. Under **Source**, select **GitHub Actions**
+
+Once configured, the site will automatically deploy whenever you push to the `main` or `master` branch.
+
+### How it Works
+
+- The deployment workflow (`.github/workflows/deploy.yml`) runs on every push to main
+- It automatically generates the `tools.json` manifest by running `generate-tools.js`
+- The entire site is then deployed to GitHub Pages
+- Your site will be available at `https://[username].github.io/[repository-name]/`
+
+### Manual Deployment
+
+You can also trigger a deployment manually:
+1. Go to **Actions** tab in your repository
+2. Select **Deploy to GitHub Pages**
+3. Click **Run workflow**
+
 ## Features
 
 - 🚀 No build process needed
