@@ -1,0 +1,4 @@
+{
+  "name": "VTT to Markdown",
+  "description": "Convert WEBVTT subtitle files into clean, speaker-grouped transcripts"
+}
