@@ -128,6 +128,65 @@
         .status.success {
             color: #2e7d32;
         }
+
+        .options {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+
+        .options label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 14px;
+            color: #444;
+            cursor: pointer;
+        }
+
+        .options input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .timestamp-interval {
+            display: none;
+            margin-top: 0.75rem;
+            padding-left: 1.5rem;
+        }
+
+        .timestamp-interval.visible {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .timestamp-interval input[type="number"] {
+            width: 70px;
+            padding: 0.4rem 0.5rem;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .timestamp-interval input[type="number"]:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+
+        .timestamp-interval span {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .timestamp-marker {
+            color: #666;
+            font-style: italic;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -137,6 +196,17 @@
     <div class="container">
         <div class="panel">
             <h2>Input (WEBVTT)</h2>
+            <div class="options">
+                <label>
+                    <input type="checkbox" id="enableTimestamps" onchange="toggleTimestampOptions()">
+                    Insert periodic timestamps
+                </label>
+                <div id="timestampInterval" class="timestamp-interval">
+                    <span>Every</span>
+                    <input type="number" id="intervalMinutes" value="1" min="1" max="60" onchange="convert()">
+                    <span>minute(s)</span>
+                </div>
+            </div>
             <textarea id="input" placeholder="Paste your WEBVTT content here..."></textarea>
             <div class="actions">
                 <button class="btn-primary" onclick="convert()">Convert</button>
@@ -155,10 +225,35 @@
     </div>
 
     <script>
+        function parseTimestamp(timestampStr) {
+            // Parse VTT timestamp like "00:01:23.456" or "01:23.456" to seconds
+            const parts = timestampStr.split(':');
+            let seconds = 0;
+            if (parts.length === 3) {
+                // HH:MM:SS.mmm
+                seconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+            } else if (parts.length === 2) {
+                // MM:SS.mmm
+                seconds = parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+            }
+            return seconds;
+        }
+
+        function formatTimestampForDisplay(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+
+            if (hours > 0) {
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+
         function parseVTT(vttContent) {
             const lines = vttContent.split('\n');
             const entries = [];
-            let currentEntry = null;
+            let currentTimestamp = null;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
@@ -173,8 +268,12 @@
                     continue;
                 }
 
-                // Skip timestamp lines
+                // Capture timestamp from timestamp lines
                 if (line.includes('-->')) {
+                    const match = line.match(/^([\d:.]+)\s*-->/);
+                    if (match) {
+                        currentTimestamp = parseTimestamp(match[1]);
+                    }
                     continue;
                 }
 
@@ -189,7 +288,8 @@
 
                         entries.push({
                             speaker: speaker,
-                            text: text
+                            text: text,
+                            timestamp: currentTimestamp
                         });
                     } else if (entries.length > 0) {
                         // Continuation of previous entry without speaker label
@@ -207,7 +307,8 @@
             const grouped = [];
             let currentGroup = {
                 speaker: entries[0].speaker,
-                text: entries[0].text
+                text: entries[0].text,
+                timestamp: entries[0].timestamp
             };
 
             for (let i = 1; i < entries.length; i++) {
@@ -227,7 +328,8 @@
                     }
                     currentGroup = {
                         speaker: entry.speaker,
-                        text: entry.text
+                        text: entry.text,
+                        timestamp: entry.timestamp
                     };
                 }
             }
@@ -240,10 +342,50 @@
             return grouped;
         }
 
-        function formatOutput(grouped) {
-            return grouped
-                .map(g => `${g.speaker}: ${g.text}`)
-                .join('\n\n');
+        function formatOutput(grouped, enableTimestamps, intervalMinutes) {
+            if (!enableTimestamps || !intervalMinutes) {
+                return grouped
+                    .map(g => `${g.speaker}: ${g.text}`)
+                    .join('\n\n');
+            }
+
+            const intervalSeconds = intervalMinutes * 60;
+            let lastTimestampMarker = -intervalSeconds; // Start so first entry can trigger timestamp
+            const output = [];
+
+            for (const g of grouped) {
+                // Check if we need to insert a timestamp marker
+                if (g.timestamp !== null && g.timestamp !== undefined) {
+                    // Calculate which interval this timestamp falls into
+                    const currentInterval = Math.floor(g.timestamp / intervalSeconds);
+                    const lastInterval = Math.floor((lastTimestampMarker + intervalSeconds) / intervalSeconds);
+
+                    if (currentInterval > lastInterval || lastTimestampMarker < 0) {
+                        // Insert timestamp marker for this interval
+                        const markerTime = currentInterval * intervalSeconds;
+                        output.push(`[${formatTimestampForDisplay(markerTime)}]`);
+                        lastTimestampMarker = markerTime;
+                    }
+                }
+
+                output.push(`${g.speaker}: ${g.text}`);
+            }
+
+            return output.join('\n\n');
+        }
+
+        function toggleTimestampOptions() {
+            const checkbox = document.getElementById('enableTimestamps');
+            const intervalDiv = document.getElementById('timestampInterval');
+
+            if (checkbox.checked) {
+                intervalDiv.classList.add('visible');
+            } else {
+                intervalDiv.classList.remove('visible');
+            }
+
+            // Re-convert if there's input
+            convert();
         }
 
         function convert() {
@@ -259,12 +401,19 @@
             }
 
             try {
+                const enableTimestamps = document.getElementById('enableTimestamps').checked;
+                const intervalMinutes = parseInt(document.getElementById('intervalMinutes').value) || 1;
+
                 const entries = parseVTT(input);
                 const grouped = groupBySpeaker(entries);
-                const result = formatOutput(grouped);
+                const result = formatOutput(grouped, enableTimestamps, intervalMinutes);
 
                 output.textContent = result;
-                status.textContent = `Converted ${entries.length} captions into ${grouped.length} speaker segments.`;
+                let statusMsg = `Converted ${entries.length} captions into ${grouped.length} speaker segments.`;
+                if (enableTimestamps) {
+                    statusMsg += ` (timestamps every ${intervalMinutes} min)`;
+                }
+                status.textContent = statusMsg;
                 status.className = 'status success';
             } catch (e) {
                 output.textContent = 'Error parsing VTT content.';
