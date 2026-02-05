@@ -342,33 +342,61 @@
             return grouped;
         }
 
-        function formatOutput(grouped, enableTimestamps, intervalMinutes) {
+        function formatOutput(grouped, enableTimestamps, intervalMinutes, entries) {
             if (!enableTimestamps || !intervalMinutes) {
                 return grouped
                     .map(g => `${g.speaker}: ${g.text}`)
                     .join('\n\n');
             }
 
+            // When timestamps enabled, work with raw entries and group within intervals
             const intervalSeconds = intervalMinutes * 60;
-            let lastTimestampMarker = -intervalSeconds; // Start so first entry can trigger timestamp
+            let lastTimestampMarker = -1;
             const output = [];
+            let currentGroup = null;
 
-            for (const g of grouped) {
-                // Check if we need to insert a timestamp marker
-                if (g.timestamp !== null && g.timestamp !== undefined) {
-                    // Calculate which interval this timestamp falls into
-                    const currentInterval = Math.floor(g.timestamp / intervalSeconds);
-                    const lastInterval = Math.floor((lastTimestampMarker + intervalSeconds) / intervalSeconds);
+            for (const entry of entries) {
+                const entryInterval = entry.timestamp !== null ? Math.floor(entry.timestamp / intervalSeconds) : lastTimestampMarker;
 
-                    if (currentInterval > lastInterval || lastTimestampMarker < 0) {
-                        // Insert timestamp marker for this interval
-                        const markerTime = currentInterval * intervalSeconds;
-                        output.push(`[${formatTimestampForDisplay(markerTime)}]`);
-                        lastTimestampMarker = markerTime;
+                // Check if we need to insert a timestamp marker (new interval)
+                if (entryInterval > lastTimestampMarker || lastTimestampMarker < 0) {
+                    // Close current group if exists
+                    if (currentGroup && currentGroup.text) {
+                        output.push(`${currentGroup.speaker}: ${currentGroup.text}`);
                     }
-                }
 
-                output.push(`${g.speaker}: ${g.text}`);
+                    // Insert timestamp marker
+                    const markerTime = Math.max(0, entryInterval) * intervalSeconds;
+                    output.push(`[${formatTimestampForDisplay(markerTime)}]`);
+                    lastTimestampMarker = entryInterval;
+
+                    // Start new group
+                    currentGroup = {
+                        speaker: entry.speaker,
+                        text: entry.text
+                    };
+                } else if (entry.speaker === currentGroup.speaker) {
+                    // Same speaker, same interval - append text
+                    if (currentGroup.text && entry.text) {
+                        currentGroup.text += ' ' + entry.text;
+                    } else if (entry.text) {
+                        currentGroup.text = entry.text;
+                    }
+                } else {
+                    // Different speaker, same interval - close current and start new
+                    if (currentGroup && currentGroup.text) {
+                        output.push(`${currentGroup.speaker}: ${currentGroup.text}`);
+                    }
+                    currentGroup = {
+                        speaker: entry.speaker,
+                        text: entry.text
+                    };
+                }
+            }
+
+            // Don't forget the last group
+            if (currentGroup && currentGroup.text) {
+                output.push(`${currentGroup.speaker}: ${currentGroup.text}`);
             }
 
             return output.join('\n\n');
@@ -406,7 +434,7 @@
 
                 const entries = parseVTT(input);
                 const grouped = groupBySpeaker(entries);
-                const result = formatOutput(grouped, enableTimestamps, intervalMinutes);
+                const result = formatOutput(grouped, enableTimestamps, intervalMinutes, entries);
 
                 output.textContent = result;
                 let statusMsg = `Converted ${entries.length} captions into ${grouped.length} speaker segments.`;
