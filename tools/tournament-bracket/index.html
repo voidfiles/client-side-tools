@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Bracket Generator - Client-Side Tools</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f1923;
+            --bg-secondary: #1a2736;
+            --bg-card: #1e3044;
+            --bg-card-hover: #243a52;
+            --border-color: #2a4a6b;
+            --text-primary: #e8edf2;
+            --text-secondary: #8899aa;
+            --text-dim: #556677;
+            --accent: #3b82f6;
+            --accent-bright: #60a5fa;
+            --winner-color: #fbbf24;
+            --winner-glow: rgba(251, 191, 36, 0.3);
+            --loser-color: #556677;
+            --connector-color: #3b82f6;
+            --bye-color: #6366f1;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --match-height: 72px;
+            --match-width: 200px;
+            --connector-width: 28px;
+            --round-gap: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.5;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            min-height: 100vh;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .app-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .app-header .back-link {
+            color: var(--accent-bright);
+            text-decoration: none;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .app-header .back-link:hover { text-decoration: underline; }
+
+        .app-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        .app-header .header-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--bg-card-hover); border-color: var(--accent); }
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover { background: var(--accent-bright); border-color: var(--accent-bright); }
+
+        .btn-danger {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.15); }
+
+        .btn-sm { padding: 0.25rem 0.625rem; font-size: 0.75rem; }
+
+        /* Main layout */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            min-width: 300px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-section h3 {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .team-textarea {
+            width: 100%;
+            min-height: 180px;
+            padding: 0.75rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        .team-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+        }
+
+        .team-textarea::placeholder { color: var(--text-dim); }
+
+        .input-help {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 0.5rem;
+        }
+
+        .team-count {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.75rem;
+            font-size: 0.8125rem;
+        }
+
+        .team-count .count-num {
+            color: var(--accent-bright);
+            font-weight: 600;
+        }
+
+        .generate-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .generate-actions .btn { flex: 1; }
+
+        /* Bracket info stats */
+        .bracket-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .stat-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.625rem 0.75rem;
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.6875rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-card .stat-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* Preset buttons */
+        .preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.375rem;
+        }
+
+        .preset-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .preset-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent-bright);
+        }
+
+        /* Bracket area */
+        .bracket-area {
+            flex: 1;
+            overflow: auto;
+            padding: 2rem;
+            position: relative;
+        }
+
+        .bracket-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-dim);
+            gap: 1rem;
+        }
+
+        .bracket-empty .empty-icon {
+            font-size: 3rem;
+            opacity: 0.3;
+        }
+
+        .bracket-empty p { font-size: 0.9375rem; }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            margin-top: 0.75rem;
+        }
+
+        /* Champion banner */
+        .champion-banner {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.02));
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            border-radius: 12px;
+            animation: championReveal 0.5s ease-out;
+        }
+
+        @keyframes championReveal {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .champion-banner .trophy { font-size: 2rem; margin-bottom: 0.25rem; }
+        .champion-banner .champion-label {
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--winner-color);
+            font-weight: 600;
+        }
+        .champion-banner .champion-name {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--winner-color);
+            letter-spacing: -0.02em;
+            margin-top: 0.125rem;
+        }
+        .champion-banner .champion-seed {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-top: 0.125rem;
+        }
+
+        /* Bracket layout */
+        .bracket-container {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 0;
+            min-width: fit-content;
+        }
+
+        .round-column {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .round-label {
+            text-align: center;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-dim);
+            padding-bottom: 1rem;
+            white-space: nowrap;
+        }
+
+        .round-matches {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            flex: 1;
+        }
+
+        /* Match card */
+        .match-wrapper {
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .match-card {
+            width: var(--match-width);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .match-card:hover {
+            border-color: var(--accent);
+        }
+
+        .match-card.has-winner {
+            border-color: rgba(251, 191, 36, 0.3);
+        }
+
+        .match-label {
+            font-size: 0.625rem;
+            color: var(--text-dim);
+            text-align: center;
+            padding: 2px 0;
+            background: rgba(0,0,0,0.15);
+            letter-spacing: 0.05em;
+        }
+
+        .team-slot {
+            display: flex;
+            align-items: center;
+            padding: 0 0.5rem;
+            height: 32px;
+            cursor: pointer;
+            transition: background 0.1s ease;
+            position: relative;
+        }
+
+        .team-slot:first-of-type {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .team-slot:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .team-slot.is-winner {
+            background: rgba(251, 191, 36, 0.1);
+        }
+
+        .team-slot.is-winner .team-name {
+            color: var(--winner-color);
+            font-weight: 700;
+        }
+
+        .team-slot.is-loser {
+            opacity: 0.45;
+        }
+
+        .team-slot.is-loser .team-name {
+            text-decoration: line-through;
+            text-decoration-color: var(--text-dim);
+        }
+
+        .team-slot.is-empty {
+            cursor: default;
+        }
+
+        .team-slot.is-bye {
+            cursor: default;
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .team-seed {
+            width: 22px;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .team-name {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .winner-check {
+            font-size: 0.75rem;
+            color: var(--winner-color);
+            margin-left: 0.25rem;
+        }
+
+        /* Connector lines */
+        .connector {
+            width: var(--connector-width);
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        /* Confirmation dialog */
+        .confirm-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            animation: fadeIn 0.15s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .confirm-dialog {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            max-width: 380px;
+            width: 90%;
+            animation: slideUp 0.2s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .confirm-dialog h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .confirm-dialog p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.25rem;
+        }
+
+        .confirm-dialog .dialog-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content { flex-direction: column; }
+            .sidebar {
+                width: 100%;
+                min-width: unset;
+                max-height: 40vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .bracket-area { padding: 1rem; }
+        }
+
+        /* Winner advance animation */
+        @keyframes advancePulse {
+            0% { box-shadow: 0 0 0 0 var(--winner-glow); }
+            70% { box-shadow: 0 0 0 6px transparent; }
+            100% { box-shadow: 0 0 0 0 transparent; }
+        }
+
+        .match-card.just-advanced {
+            animation: advancePulse 0.4s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+    const { useState, useCallback, useMemo, useEffect, useRef } = React;
+
+    // ───────────────────────────────────────────────
+    // Domain helpers
+    // ───────────────────────────────────────────────
+
+    function nextPowerOf2(n) {
+        let p = 1;
+        while (p < n) p *= 2;
+        return p;
+    }
+
+    /**
+     * Fold/mirror algorithm for proper seeding.
+     * Produces bracket-ordered seed pairings so that
+     * seed 1 and seed 2 end up in opposite halves.
+     */
+    function generateSeedOrder(bracketSize) {
+        let seeds = [1];
+        let size = 1;
+        while (size < bracketSize) {
+            size *= 2;
+            const next = [];
+            for (const s of seeds) {
+                next.push(s);
+                next.push(size + 1 - s);
+            }
+            seeds = next;
+        }
+        return seeds;
+    }
+
+    function generatePairings(bracketSize) {
+        const seeds = generateSeedOrder(bracketSize);
+        const pairings = [];
+        for (let i = 0; i < seeds.length; i += 2) {
+            pairings.push([seeds[i], seeds[i + 1]]);
+        }
+        return pairings;
+    }
+
+    /**
+     * Returns a human-readable round name.
+     */
+    function getRoundName(roundIndex, totalRounds) {
+        const remaining = totalRounds - roundIndex;
+        if (remaining === 1) return "Championship";
+        if (remaining === 2) return "Semifinals";
+        if (remaining === 3) return "Quarterfinals";
+
+        const teamsInRound = Math.pow(2, totalRounds - roundIndex);
+        if (teamsInRound === 64) return "Round of 64";
+        if (teamsInRound === 32) return "Round of 32";
+        if (teamsInRound === 16) return "Sweet 16";
+        if (teamsInRound === 8) return "Elite 8";
+        return `Round ${roundIndex + 1}`;
+    }
+
+    /**
+     * Build the full bracket data structure from a list of teams.
+     * Returns { rounds, bracketSize, numByes, totalRounds }
+     * Each round is an array of match objects.
+     */
+    function buildBracket(teams) {
+        const n = teams.length;
+        const bracketSize = nextPowerOf2(n);
+        const totalRounds = Math.log2(bracketSize);
+        const numByes = bracketSize - n;
+        const pairings = generatePairings(bracketSize);
+
+        // Build the match grid: rounds[roundIdx][matchIdx]
+        const rounds = [];
+
+        // Round 0 — first round from pairings
+        const firstRound = pairings.map((pair, idx) => {
+            const [s1, s2] = pair;
+            const team1 = s1 <= n ? teams[s1 - 1] : null; // null = bye
+            const team2 = s2 <= n ? teams[s2 - 1] : null;
+
+            const isBye = team1 === null || team2 === null;
+            const byeWinner = isBye ? (team1 || team2) : null;
+
+            return {
+                id: `0-${idx}`,
+                round: 0,
+                position: idx,
+                team1,
+                team2,
+                winner: byeWinner,
+                isBye,
+            };
+        });
+        rounds.push(firstRound);
+
+        // Subsequent rounds — empty slots
+        for (let r = 1; r < totalRounds; r++) {
+            const numMatches = bracketSize / Math.pow(2, r + 1);
+            const round = [];
+            for (let m = 0; m < numMatches; m++) {
+                round.push({
+                    id: `${r}-${m}`,
+                    round: r,
+                    position: m,
+                    team1: null,
+                    team2: null,
+                    winner: null,
+                    isBye: false,
+                });
+            }
+            rounds.push(round);
+        }
+
+        // Auto-advance bye winners into round 1+
+        propagateByeWinners(rounds);
+
+        return { rounds, bracketSize, numByes, totalRounds };
+    }
+
+    /**
+     * After building the initial bracket, advance bye winners forward.
+     * A bye winner from round r, position p feeds into round r+1,
+     * position floor(p/2), slot (p%2 === 0 ? team1 : team2).
+     */
+    function propagateByeWinners(rounds) {
+        for (let r = 0; r < rounds.length - 1; r++) {
+            for (const match of rounds[r]) {
+                if (match.winner && match.isBye) {
+                    placeInNextRound(rounds, match);
+                }
+            }
+        }
+    }
+
+    function placeInNextRound(rounds, match) {
+        const nextRound = match.round + 1;
+        if (nextRound >= rounds.length) return;
+
+        const nextPos = Math.floor(match.position / 2);
+        const slot = match.position % 2 === 0 ? 'team1' : 'team2';
+        const nextMatch = rounds[nextRound][nextPos];
+
+        nextMatch[slot] = match.winner;
+
+        // If the next match also becomes a bye (both slots filled by byes)
+        // that won't happen in standard brackets, but handle it:
+        if (nextMatch.team1 && nextMatch.team2 === null && nextMatch.isBye) {
+            nextMatch.winner = nextMatch.team1;
+            placeInNextRound(rounds, nextMatch);
+        } else if (nextMatch.team2 && nextMatch.team1 === null && nextMatch.isBye) {
+            nextMatch.winner = nextMatch.team2;
+            placeInNextRound(rounds, nextMatch);
+        }
+    }
+
+    /**
+     * Deep clone the rounds structure (matches are plain objects).
+     */
+    function cloneRounds(rounds) {
+        return rounds.map(round =>
+            round.map(match => ({ ...match }))
+        );
+    }
+
+    /**
+     * Set a winner for a match and propagate forward.
+     * Also cascade-clear any downstream results that depended on a different winner.
+     */
+    function advanceWinner(rounds, roundIdx, matchIdx, winner) {
+        const newRounds = cloneRounds(rounds);
+        const match = newRounds[roundIdx][matchIdx];
+        const oldWinner = match.winner;
+        match.winner = winner;
+
+        // Place winner into next round
+        const nextRound = roundIdx + 1;
+        if (nextRound < newRounds.length) {
+            const nextPos = Math.floor(matchIdx / 2);
+            const slot = matchIdx % 2 === 0 ? 'team1' : 'team2';
+            const nextMatch = newRounds[nextRound][nextPos];
+
+            // If the old winner was different, cascade-clear downstream
+            if (oldWinner && oldWinner.id !== winner.id) {
+                cascadeClear(newRounds, nextRound, nextPos, oldWinner);
+            }
+
+            nextMatch[slot] = winner;
+        }
+
+        return newRounds;
+    }
+
+    /**
+     * Cascade-clear: remove a team from all downstream matches.
+     * If a match had that team as winner, clear the winner and continue.
+     */
+    function cascadeClear(rounds, roundIdx, matchIdx, team) {
+        if (roundIdx >= rounds.length) return;
+
+        const match = rounds[roundIdx][matchIdx];
+
+        // Clear the team from this match's slots
+        if (match.team1 && match.team1.id === team.id) match.team1 = null;
+        if (match.team2 && match.team2.id === team.id) match.team2 = null;
+
+        // If this match's winner was the cleared team, cascade further
+        if (match.winner && match.winner.id === team.id) {
+            match.winner = null;
+            const nextRound = roundIdx + 1;
+            const nextPos = Math.floor(matchIdx / 2);
+            cascadeClear(rounds, nextRound, nextPos, team);
+        }
+    }
+
+    // ───────────────────────────────────────────────
+    // Sample team presets
+    // ───────────────────────────────────────────────
+
+    const PRESETS = {
+        4: "Eagles\nTigers\nBears\nWolves",
+        8: "Eagles\nTigers\nBears\nWolves\nHawks\nLions\nSharks\nPanthers",
+        16: "Eagles\nTigers\nBears\nWolves\nHawks\nLions\nSharks\nPanthers\nFalcons\nCobras\nRavens\nJaguars\nVipers\nMustangs\nDragons\nPhoenix",
+        32: "Eagles\nTigers\nBears\nWolves\nHawks\nLions\nSharks\nPanthers\nFalcons\nCobras\nRavens\nJaguars\nVipers\nMustangs\nDragons\nPhoenix\nStallions\nCougars\nBulldogs\nHornets\nGrizzlies\nOwls\nCondors\nWildcats\nBadgers\nTimberwolves\nBarracudas\nLeopards\nRaptors\nMarines\nThunder\nStorm",
+    };
+
+    // ───────────────────────────────────────────────
+    // Components
+    // ───────────────────────────────────────────────
+
+    function ConfirmDialog({ title, message, onConfirm, onCancel }) {
+        return (
+            <div className="confirm-overlay" onClick={onCancel}>
+                <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
+                    <h3>{title}</h3>
+                    <p>{message}</p>
+                    <div className="dialog-actions">
+                        <button className="btn" onClick={onCancel}>Cancel</button>
+                        <button className="btn btn-danger" onClick={onConfirm}>Reset</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    function ChampionBanner({ champion }) {
+        if (!champion) return null;
+        return (
+            <div className="champion-banner">
+                <div className="trophy">&#127942;</div>
+                <div className="champion-label">Champion</div>
+                <div className="champion-name">{champion.name}</div>
+                <div className="champion-seed">Seed #{champion.seed}</div>
+            </div>
+        );
+    }
+
+    function TeamSlot({ team, isWinner, isLoser, isBye, onClick }) {
+        let className = "team-slot";
+        if (!team) className += " is-empty";
+        else if (isBye) className += " is-bye";
+        else if (isWinner) className += " is-winner";
+        else if (isLoser) className += " is-loser";
+
+        const handleClick = () => {
+            if (team && !isBye && onClick) onClick(team);
+        };
+
+        return (
+            <div className={className} onClick={handleClick} title={team ? team.name : ''}>
+                {team ? (
+                    <>
+                        <span className="team-seed">{team.seed}</span>
+                        <span className="team-name">{team.name}</span>
+                        {isWinner && <span className="winner-check">&#10003;</span>}
+                    </>
+                ) : (
+                    <>
+                        <span className="team-seed">-</span>
+                        <span className="team-name" style={{ color: 'var(--text-dim)' }}>TBD</span>
+                    </>
+                )}
+            </div>
+        );
+    }
+
+    function MatchCard({ match, onAdvance, justAdvanced }) {
+        const hasWinner = match.winner !== null;
+        let cardClass = "match-card";
+        if (hasWinner) cardClass += " has-winner";
+        if (justAdvanced) cardClass += " just-advanced";
+
+        const canClick = (team) => {
+            return team && !match.isBye;
+        };
+
+        return (
+            <div className={cardClass}>
+                <div className="match-label">
+                    {match.isBye ? 'BYE' : `M${match.position + 1}`}
+                </div>
+                <TeamSlot
+                    team={match.team1}
+                    isWinner={hasWinner && match.winner && match.team1 && match.winner.id === match.team1.id}
+                    isLoser={hasWinner && match.team1 && match.winner && match.winner.id !== match.team1.id}
+                    isBye={match.isBye && !match.team1}
+                    onClick={canClick(match.team1) ? () => onAdvance(match.team1) : null}
+                />
+                <TeamSlot
+                    team={match.team2}
+                    isWinner={hasWinner && match.winner && match.team2 && match.winner.id === match.team2.id}
+                    isLoser={hasWinner && match.team2 && match.winner && match.winner.id !== match.team2.id}
+                    isBye={match.isBye && !match.team2}
+                    onClick={canClick(match.team2) ? () => onAdvance(match.team2) : null}
+                />
+            </div>
+        );
+    }
+
+    /**
+     * SVG-based connectors between rounds.
+     * For each pair of matches in round r, draw lines converging
+     * to the corresponding match in round r+1.
+     */
+    function RoundConnectors({ roundMatches, nextRoundMatches, matchHeight, matchRefs, nextMatchRefs, containerRef }) {
+        const [paths, setPaths] = useState([]);
+
+        useEffect(() => {
+            if (!containerRef.current) return;
+
+            const newPaths = [];
+            const containerRect = containerRef.current.getBoundingClientRect();
+
+            for (let i = 0; i < roundMatches.length; i += 2) {
+                const nextIdx = Math.floor(i / 2);
+                if (nextIdx >= nextRoundMatches.length) break;
+
+                const topRef = matchRefs[i];
+                const bottomRef = matchRefs[i + 1];
+                const targetRef = nextMatchRefs[nextIdx];
+
+                if (!topRef?.current || !bottomRef?.current || !targetRef?.current) continue;
+
+                const topRect = topRef.current.getBoundingClientRect();
+                const bottomRect = bottomRef.current.getBoundingClientRect();
+                const targetRect = targetRef.current.getBoundingClientRect();
+
+                const startX = topRect.right - containerRect.left;
+                const topY = topRect.top + topRect.height / 2 - containerRect.top;
+                const bottomY = bottomRect.top + bottomRect.height / 2 - containerRect.top;
+                const endX = targetRect.left - containerRect.left;
+                const endY = targetRect.top + targetRect.height / 2 - containerRect.top;
+                const midX = (startX + endX) / 2;
+
+                newPaths.push(
+                    <g key={`connector-${i}`}>
+                        {/* Top match to mid */}
+                        <path
+                            d={`M ${startX} ${topY} H ${midX} V ${endY}`}
+                            fill="none"
+                            stroke="var(--connector-color)"
+                            strokeWidth="2"
+                            strokeOpacity="0.5"
+                        />
+                        {/* Bottom match to mid */}
+                        <path
+                            d={`M ${startX} ${bottomY} H ${midX} V ${endY}`}
+                            fill="none"
+                            stroke="var(--connector-color)"
+                            strokeWidth="2"
+                            strokeOpacity="0.5"
+                        />
+                        {/* Mid to next match */}
+                        <path
+                            d={`M ${midX} ${endY} H ${endX}`}
+                            fill="none"
+                            stroke="var(--connector-color)"
+                            strokeWidth="2"
+                            strokeOpacity="0.5"
+                        />
+                    </g>
+                );
+            }
+            setPaths(newPaths);
+        });
+
+        return paths;
+    }
+
+    function BracketView({ rounds, totalRounds, onAdvance, lastAdvanced }) {
+        const containerRef = useRef(null);
+        // Create refs for every match card across all rounds
+        const allMatchRefs = useRef([]);
+
+        // Ensure we have enough refs
+        const totalMatches = rounds.reduce((sum, r) => sum + r.length, 0);
+        if (allMatchRefs.current.length !== totalMatches) {
+            allMatchRefs.current = [];
+            for (let i = 0; i < totalMatches; i++) {
+                allMatchRefs.current.push(React.createRef());
+            }
+        }
+
+        // Build a map: refsByRound[roundIdx][matchIdx] = ref
+        let refIndex = 0;
+        const refsByRound = rounds.map(round =>
+            round.map(() => allMatchRefs.current[refIndex++])
+        );
+
+        // Force re-render on resize to recalculate connectors
+        const [, setTick] = useState(0);
+        useEffect(() => {
+            const onResize = () => setTick(t => t + 1);
+            window.addEventListener('resize', onResize);
+            // Small delay to let initial layout settle
+            const timer = setTimeout(onResize, 50);
+            return () => {
+                window.removeEventListener('resize', onResize);
+                clearTimeout(timer);
+            };
+        }, [rounds]);
+
+        return (
+            <div className="bracket-container" ref={containerRef} style={{ position: 'relative' }}>
+                {/* SVG layer for connectors */}
+                <svg
+                    style={{
+                        position: 'absolute',
+                        top: 0, left: 0,
+                        width: '100%', height: '100%',
+                        pointerEvents: 'none',
+                        zIndex: 1,
+                    }}
+                >
+                    {rounds.map((round, rIdx) => {
+                        if (rIdx >= rounds.length - 1) return null;
+                        return (
+                            <RoundConnectors
+                                key={`conn-${rIdx}`}
+                                roundMatches={round}
+                                nextRoundMatches={rounds[rIdx + 1]}
+                                matchHeight={72}
+                                matchRefs={refsByRound[rIdx]}
+                                nextMatchRefs={refsByRound[rIdx + 1]}
+                                containerRef={containerRef}
+                            />
+                        );
+                    })}
+                </svg>
+
+                {rounds.map((round, rIdx) => {
+                    const roundName = getRoundName(rIdx, totalRounds);
+                    return (
+                        <div
+                            key={rIdx}
+                            className="round-column"
+                            style={{
+                                marginRight: rIdx < rounds.length - 1 ? 'var(--connector-width)' : 0,
+                                zIndex: 2,
+                            }}
+                        >
+                            <div className="round-label">{roundName}</div>
+                            <div className="round-matches">
+                                {round.map((match, mIdx) => (
+                                    <div
+                                        key={match.id}
+                                        className="match-wrapper"
+                                        ref={refsByRound[rIdx][mIdx]}
+                                    >
+                                        <MatchCard
+                                            match={match}
+                                            onAdvance={(team) => onAdvance(rIdx, mIdx, team)}
+                                            justAdvanced={lastAdvanced === match.id}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    function Sidebar({ teamText, onTeamTextChange, onGenerate, teamCount, bracketData, onReset, error }) {
+        return (
+            <div className="sidebar">
+                <div className="sidebar-section">
+                    <h3>Teams</h3>
+                    <textarea
+                        className="team-textarea"
+                        value={teamText}
+                        onChange={e => onTeamTextChange(e.target.value)}
+                        placeholder={"Enter team names, one per line.\nOrder determines seed (first = #1 seed).\n\nExample:\nDuke\nKansas\nKentucky\nNorth Carolina"}
+                        spellCheck={false}
+                    />
+                    <div className="input-help">
+                        Line order = seed ranking. First line is the #1 seed.
+                    </div>
+                    <div className="team-count">
+                        <span>
+                            Teams: <span className="count-num">{teamCount}</span>
+                        </span>
+                        {teamCount > 0 && (
+                            <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+                                Bracket: {nextPowerOf2(Math.max(teamCount, 2))} slots
+                            </span>
+                        )}
+                    </div>
+                    <div className="generate-actions">
+                        <button
+                            className="btn btn-primary"
+                            onClick={onGenerate}
+                            disabled={teamCount < 2}
+                        >
+                            Generate Bracket
+                        </button>
+                        {bracketData && (
+                            <button className="btn btn-danger" onClick={onReset}>
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                    {error && <div className="error-message">{error}</div>}
+                </div>
+
+                <div className="sidebar-section">
+                    <h3>Presets</h3>
+                    <div className="preset-buttons">
+                        {Object.entries(PRESETS).map(([count, text]) => (
+                            <button
+                                key={count}
+                                className="preset-btn"
+                                onClick={() => onTeamTextChange(text)}
+                            >
+                                {count} teams
+                            </button>
+                        ))}
+                        <button
+                            className="preset-btn"
+                            onClick={() => onTeamTextChange("Alpha\nBravo\nCharlie\nDelta\nEcho")}
+                        >
+                            5 teams (byes)
+                        </button>
+                        <button
+                            className="preset-btn"
+                            onClick={() => onTeamTextChange("Red\nBlue\nGreen\nYellow\nOrange\nPurple\nPink")}
+                        >
+                            7 teams (byes)
+                        </button>
+                    </div>
+                </div>
+
+                {bracketData && (
+                    <div className="sidebar-section">
+                        <h3>Bracket Info</h3>
+                        <div className="bracket-stats">
+                            <div className="stat-card">
+                                <div className="stat-label">Teams</div>
+                                <div className="stat-value">{bracketData.bracketSize - bracketData.numByes}</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Bracket Size</div>
+                                <div className="stat-value">{bracketData.bracketSize}</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Rounds</div>
+                                <div className="stat-value">{bracketData.totalRounds}</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-label">Byes</div>
+                                <div className="stat-value">{bracketData.numByes}</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    function App() {
+        const [teamText, setTeamText] = useState(PRESETS[8]);
+        const [bracketData, setBracketData] = useState(null);
+        const [rounds, setRounds] = useState(null);
+        const [error, setError] = useState(null);
+        const [confirmReset, setConfirmReset] = useState(false);
+        const [lastAdvanced, setLastAdvanced] = useState(null);
+
+        const teamCount = useMemo(() => {
+            return teamText.split('\n').map(l => l.trim()).filter(Boolean).length;
+        }, [teamText]);
+
+        const champion = useMemo(() => {
+            if (!rounds || rounds.length === 0) return null;
+            const finalRound = rounds[rounds.length - 1];
+            if (finalRound.length !== 1) return null;
+            return finalRound[0].winner;
+        }, [rounds]);
+
+        const handleGenerate = useCallback(() => {
+            setError(null);
+            const names = teamText.split('\n').map(l => l.trim()).filter(Boolean);
+
+            if (names.length < 2) {
+                setError("Please enter at least 2 teams.");
+                return;
+            }
+
+            if (names.length > 64) {
+                setError("Maximum 64 teams supported.");
+                return;
+            }
+
+            const teams = names.map((name, i) => ({
+                id: `team-${i}`,
+                name,
+                seed: i + 1,
+            }));
+
+            const data = buildBracket(teams);
+            setBracketData(data);
+            setRounds(data.rounds);
+            setLastAdvanced(null);
+        }, [teamText]);
+
+        const handleAdvance = useCallback((roundIdx, matchIdx, team) => {
+            setRounds(prev => {
+                const match = prev[roundIdx][matchIdx];
+                // If both teams present and team is one of them
+                if (match.team1 && match.team2) {
+                    const newRounds = advanceWinner(prev, roundIdx, matchIdx, team);
+                    setLastAdvanced(`${roundIdx + 1}-${Math.floor(matchIdx / 2)}`);
+                    // Clear animation after delay
+                    setTimeout(() => setLastAdvanced(null), 400);
+                    return newRounds;
+                }
+                return prev;
+            });
+        }, []);
+
+        const handleReset = useCallback(() => {
+            if (bracketData) {
+                setConfirmReset(true);
+            }
+        }, [bracketData]);
+
+        const doReset = useCallback(() => {
+            setBracketData(null);
+            setRounds(null);
+            setConfirmReset(false);
+            setLastAdvanced(null);
+        }, []);
+
+        return (
+            <div className="app-container">
+                <header className="app-header">
+                    <a href="../../index.html" className="back-link">&larr; All Tools</a>
+                    <h1>Tournament Bracket Generator</h1>
+                    <div className="header-right">
+                        {rounds && (
+                            <button className="btn btn-sm" onClick={() => {
+                                // Re-generate from same text (re-seed)
+                                handleGenerate();
+                            }}>
+                                Regenerate
+                            </button>
+                        )}
+                    </div>
+                </header>
+
+                <div className="main-content">
+                    <Sidebar
+                        teamText={teamText}
+                        onTeamTextChange={setTeamText}
+                        onGenerate={handleGenerate}
+                        teamCount={teamCount}
+                        bracketData={bracketData}
+                        onReset={handleReset}
+                        error={error}
+                    />
+
+                    <div className="bracket-area">
+                        {!rounds ? (
+                            <div className="bracket-empty">
+                                <div className="empty-icon">&#127942;</div>
+                                <p>Enter your teams and click "Generate Bracket" to begin.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <ChampionBanner champion={champion} />
+                                <BracketView
+                                    rounds={rounds}
+                                    totalRounds={bracketData.totalRounds}
+                                    onAdvance={handleAdvance}
+                                    lastAdvanced={lastAdvanced}
+                                />
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {confirmReset && (
+                    <ConfirmDialog
+                        title="Reset Bracket?"
+                        message="This will clear the entire bracket and all results. You can regenerate from the team list."
+                        onConfirm={doReset}
+                        onCancel={() => setConfirmReset(false)}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // ───────────────────────────────────────────────
+    // Mount
+    // ───────────────────────────────────────────────
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    </script>
+</body>
+</html>
