@@ -10,6 +10,11 @@
     "description": "Format, validate, and beautify JSON data"
   },
   {
+    "id": "tournament-bracket",
+    "name": "Tournament Bracket Generator",
+    "description": "Create and interact with seeded single-elimination tournament brackets"
+  },
+  {
     "id": "vtt-to-md",
     "name": "VTT to Markdown",
     "description": "Convert WEBVTT subtitle files into clean, speaker-grouped transcripts"
