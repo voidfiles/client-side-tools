@@ -18,5 +18,10 @@
     "id": "vtt-to-md",
     "name": "VTT to Markdown",
     "description": "Convert WEBVTT subtitle files into clean, speaker-grouped transcripts"
+  },
+  {
+    "id": "strip-svg-data-urls",
+    "name": "Strip SVG Data URLs",
+    "description": "Remove embedded data URLs (base64 images, fonts, etc.) from SVG markup to reduce file size"
   }
 ]
