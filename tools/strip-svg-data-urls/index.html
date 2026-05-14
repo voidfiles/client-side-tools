@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strip SVG Data URLs - Client-Side Tools</title>
+    <title>Strip SVG Data URLs &amp; CSS - Client-Side Tools</title>
     <style>
         * {
             margin: 0;
@@ -152,6 +152,31 @@
             color: #e67e22;
         }
 
+        .options {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .option-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-size: 0.95rem;
+            color: #444;
+            user-select: none;
+        }
+
+        .option-label input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
         #message {
             min-height: 2.5rem;
             margin-bottom: 0.5rem;
@@ -185,21 +210,39 @@
         <a href="../../" class="back-link">← Back to Tools</a>
 
         <header>
-            <h1>Strip SVG Data URLs</h1>
-            <p>Paste SVG markup to remove all embedded data URLs (base64 images, fonts, etc.)</p>
+            <h1>Strip SVG Data URLs &amp; CSS</h1>
+            <p>Paste SVG markup to remove embedded data URLs and/or CSS from SVG files</p>
         </header>
 
         <div id="message"></div>
 
+        <div class="options">
+            <label class="option-label">
+                <input type="checkbox" id="opt-data-urls" checked>
+                Strip data URLs
+            </label>
+            <label class="option-label">
+                <input type="checkbox" id="opt-css">
+                Strip CSS (<code>&lt;style&gt;</code> blocks and <code>style=</code> attributes)
+            </label>
+            <label class="option-label" id="opt-class-label" style="display:none">
+                <input type="checkbox" id="opt-class">
+                Also remove <code>class=</code> attributes
+            </label>
+        </div>
+
         <div class="stats" id="stats" style="display:none">
-            <span>Data URLs removed: <span class="count" id="stat-count">0</span></span>
+            <span id="stat-data-urls-wrap">Data URLs removed: <span class="count" id="stat-count">0</span></span>
+            <span id="stat-style-blocks-wrap">Style blocks removed: <span class="count" id="stat-style-blocks">0</span></span>
+            <span id="stat-style-attrs-wrap">Style attrs removed: <span class="count" id="stat-style-attrs">0</span></span>
+            <span id="stat-class-attrs-wrap">Class attrs removed: <span class="count" id="stat-class-attrs">0</span></span>
             <span>Size before: <span class="count" id="stat-before">—</span></span>
             <span>Size after: <span class="count" id="stat-after">—</span></span>
             <span>Saved: <span class="count" id="stat-saved">—</span></span>
         </div>
 
         <div class="controls">
-            <button onclick="strip()">Strip Data URLs</button>
+            <button onclick="strip()">Strip</button>
             <button onclick="copyOutput()" class="secondary" id="copy-btn" disabled>Copy Output</button>
             <button onclick="clearAll()" class="secondary">Clear</button>
         </div>
@@ -222,6 +265,14 @@
         const messageEl = document.getElementById('message');
         const statsEl = document.getElementById('stats');
         const copyBtn = document.getElementById('copy-btn');
+        const optCss = document.getElementById('opt-css');
+        const optClass = document.getElementById('opt-class');
+        const optClassLabel = document.getElementById('opt-class-label');
+
+        optCss.addEventListener('change', () => {
+            optClassLabel.style.display = optCss.checked ? '' : 'none';
+            if (!optCss.checked) optClass.checked = false;
+        });
 
         function showMessage(text, type) {
             messageEl.innerHTML = `<div class="message-box ${type}">${text}</div>`;
@@ -241,36 +292,70 @@
                 return;
             }
 
-            let count = 0;
+            const doDataUrls = document.getElementById('opt-data-urls').checked;
+            const doCss = optCss.checked;
+            const doClass = optClass.checked;
 
-            // Replace data URLs in attribute values (href, xlink:href, src, etc.)
-            // and in CSS url() expressions within style attributes or <style> blocks.
-            // A data URL is: data:[<mediatype>][;base64],<data>
-            // We match greedily up to a quote/paren boundary.
-            const dataUrlPattern = /data:[^;]*(?:;[^,]*)?,(?:[A-Za-z0-9+/=\s]|%[0-9A-Fa-f]{2}|[!$&'()*+,;:@\-._~!#]|[^\x00-\x7F])*/g;
+            if (!doDataUrls && !doCss) {
+                showMessage('Select at least one stripping option.', 'error');
+                return;
+            }
 
-            const result = input.replace(dataUrlPattern, () => {
-                count++;
-                return '';
-            });
+            let dataUrlCount = 0;
+            let styleBlockCount = 0;
+            let styleAttrCount = 0;
+            let classAttrCount = 0;
+            let result = input;
+
+            if (doDataUrls) {
+                const dataUrlPattern = /data:[^;]*(?:;[^,]*)?,(?:[A-Za-z0-9+/=\s]|%[0-9A-Fa-f]{2}|[!$&'()*+,;:@\-._~!#]|[^\x00-\x7F])*/g;
+                result = result.replace(dataUrlPattern, () => { dataUrlCount++; return ''; });
+            }
+
+            if (doCss) {
+                result = result.replace(/<style[\s\S]*?<\/style>/gi, () => { styleBlockCount++; return ''; });
+                // Remove style attributes: style="..." or style='...'
+                result = result.replace(/\s+style=(?:"[^"]*"|'[^']*')/gi, () => { styleAttrCount++; return ''; });
+            }
+
+            if (doClass) {
+                // Remove class attributes: class="..." or class='...'
+                result = result.replace(/\s+class=(?:"[^"]*"|'[^']*')/gi, () => { classAttrCount++; return ''; });
+            }
 
             outputEl.value = result;
             copyBtn.disabled = false;
 
             const beforeBytes = new TextEncoder().encode(input).length;
             const afterBytes = new TextEncoder().encode(result).length;
+            const totalRemovals = dataUrlCount + styleBlockCount + styleAttrCount + classAttrCount;
 
             statsEl.style.display = 'flex';
-            statsEl.className = count > 0 ? 'stats has-removals' : 'stats';
-            document.getElementById('stat-count').textContent = count;
+            statsEl.className = totalRemovals > 0 ? 'stats has-removals' : 'stats';
+
+            const show = (id, visible) => document.getElementById(id).style.display = visible ? '' : 'none';
+            show('stat-data-urls-wrap', doDataUrls);
+            show('stat-style-blocks-wrap', doCss);
+            show('stat-style-attrs-wrap', doCss);
+            show('stat-class-attrs-wrap', doClass);
+
+            document.getElementById('stat-count').textContent = dataUrlCount;
+            document.getElementById('stat-style-blocks').textContent = styleBlockCount;
+            document.getElementById('stat-style-attrs').textContent = styleAttrCount;
+            document.getElementById('stat-class-attrs').textContent = classAttrCount;
             document.getElementById('stat-before').textContent = formatBytes(beforeBytes);
             document.getElementById('stat-after').textContent = formatBytes(afterBytes);
             document.getElementById('stat-saved').textContent = formatBytes(beforeBytes - afterBytes);
 
-            if (count === 0) {
-                showMessage('No data URLs found in the input.', 'success');
+            if (totalRemovals === 0) {
+                showMessage('Nothing to remove found in the input.', 'success');
             } else {
-                showMessage(`Removed ${count} data URL${count !== 1 ? 's' : ''}.`, 'success');
+                const parts = [];
+                if (dataUrlCount) parts.push(`${dataUrlCount} data URL${dataUrlCount !== 1 ? 's' : ''}`);
+                if (styleBlockCount) parts.push(`${styleBlockCount} style block${styleBlockCount !== 1 ? 's' : ''}`);
+                if (styleAttrCount) parts.push(`${styleAttrCount} style attribute${styleAttrCount !== 1 ? 's' : ''}`);
+                if (classAttrCount) parts.push(`${classAttrCount} class attribute${classAttrCount !== 1 ? 's' : ''}`);
+                showMessage(`Removed: ${parts.join(', ')}.`, 'success');
             }
         }
 
