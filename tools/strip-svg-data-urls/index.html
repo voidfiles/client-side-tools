@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strip SVG Data URLs - Client-Side Tools</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .back-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: background 0.2s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.secondary:hover {
+            background: #5a6268;
+        }
+
+        button:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+        }
+
+        .editor-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .editor-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-section h3 {
+            margin-bottom: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        textarea {
+            flex: 1;
+            min-height: 450px;
+            padding: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .stats {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: #555;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .stats span {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .stats .count {
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stats.has-removals .count {
+            color: #e67e22;
+        }
+
+        #message {
+            min-height: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .message-box {
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .message-box.error {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .message-box.success {
+            background: #51cf66;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .editor-area {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../" class="back-link">← Back to Tools</a>
+
+        <header>
+            <h1>Strip SVG Data URLs</h1>
+            <p>Paste SVG markup to remove all embedded data URLs (base64 images, fonts, etc.)</p>
+        </header>
+
+        <div id="message"></div>
+
+        <div class="stats" id="stats" style="display:none">
+            <span>Data URLs removed: <span class="count" id="stat-count">0</span></span>
+            <span>Size before: <span class="count" id="stat-before">—</span></span>
+            <span>Size after: <span class="count" id="stat-after">—</span></span>
+            <span>Saved: <span class="count" id="stat-saved">—</span></span>
+        </div>
+
+        <div class="controls">
+            <button onclick="strip()">Strip Data URLs</button>
+            <button onclick="copyOutput()" class="secondary" id="copy-btn" disabled>Copy Output</button>
+            <button onclick="clearAll()" class="secondary">Clear</button>
+        </div>
+
+        <div class="editor-area">
+            <div class="editor-section">
+                <h3>Input SVG</h3>
+                <textarea id="input" placeholder="Paste your SVG here..."></textarea>
+            </div>
+            <div class="editor-section">
+                <h3>Output SVG</h3>
+                <textarea id="output" readonly placeholder="Stripped SVG will appear here..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const inputEl = document.getElementById('input');
+        const outputEl = document.getElementById('output');
+        const messageEl = document.getElementById('message');
+        const statsEl = document.getElementById('stats');
+        const copyBtn = document.getElementById('copy-btn');
+
+        function showMessage(text, type) {
+            messageEl.innerHTML = `<div class="message-box ${type}">${text}</div>`;
+            setTimeout(() => { messageEl.innerHTML = ''; }, 3000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function strip() {
+            const input = inputEl.value;
+            if (!input.trim()) {
+                showMessage('Please paste some SVG first.', 'error');
+                return;
+            }
+
+            let count = 0;
+
+            // Replace data URLs in attribute values (href, xlink:href, src, etc.)
+            // and in CSS url() expressions within style attributes or <style> blocks.
+            // A data URL is: data:[<mediatype>][;base64],<data>
+            // We match greedily up to a quote/paren boundary.
+            const dataUrlPattern = /data:[^;]*(?:;[^,]*)?,(?:[A-Za-z0-9+/=\s]|%[0-9A-Fa-f]{2}|[!$&'()*+,;:@\-._~!#]|[^\x00-\x7F])*/g;
+
+            const result = input.replace(dataUrlPattern, () => {
+                count++;
+                return '';
+            });
+
+            outputEl.value = result;
+            copyBtn.disabled = false;
+
+            const beforeBytes = new TextEncoder().encode(input).length;
+            const afterBytes = new TextEncoder().encode(result).length;
+
+            statsEl.style.display = 'flex';
+            statsEl.className = count > 0 ? 'stats has-removals' : 'stats';
+            document.getElementById('stat-count').textContent = count;
+            document.getElementById('stat-before').textContent = formatBytes(beforeBytes);
+            document.getElementById('stat-after').textContent = formatBytes(afterBytes);
+            document.getElementById('stat-saved').textContent = formatBytes(beforeBytes - afterBytes);
+
+            if (count === 0) {
+                showMessage('No data URLs found in the input.', 'success');
+            } else {
+                showMessage(`Removed ${count} data URL${count !== 1 ? 's' : ''}.`, 'success');
+            }
+        }
+
+        async function copyOutput() {
+            const text = outputEl.value;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                showMessage('Copied to clipboard!', 'success');
+            } catch {
+                outputEl.select();
+                document.execCommand('copy');
+                showMessage('Copied to clipboard!', 'success');
+            }
+        }
+
+        function clearAll() {
+            inputEl.value = '';
+            outputEl.value = '';
+            messageEl.innerHTML = '';
+            statsEl.style.display = 'none';
+            copyBtn.disabled = true;
+        }
+
+        // Strip automatically when user pastes
+        inputEl.addEventListener('paste', () => {
+            setTimeout(strip, 0);
+        });
+    </script>
+</body>
+</html>
