@@ -21,7 +21,7 @@
   },
   {
     "id": "strip-svg-data-urls",
-    "name": "Strip SVG Data URLs",
-    "description": "Remove embedded data URLs (base64 images, fonts, etc.) from SVG markup to reduce file size"
+    "name": "Strip SVG Data URLs & CSS",
+    "description": "Remove embedded data URLs (base64 images, fonts, etc.) and/or CSS from SVG markup to reduce file size"
   }
 ]
