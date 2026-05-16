@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All-State Vote Tabulator</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
+<style>
+nav a { margin-right: 1rem; }
+.error { color: var(--pico-color-red-500); }
+table { margin-bottom: 1.5rem; }
+td, th { padding: 0.4rem 0.8rem; }
+section h3 { margin-top: 2rem; }
+section h4 { margin-top: 0.5rem; margin-bottom: 0.25rem; font-size: 1rem; }
+.mvp-badge { font-weight: bold; color: var(--pico-color-amber-500, #d97706); }
+</style>
+</head>
+<body>
+<main class="container">
+<h1>All-State Vote Tabulator</h1>
+<nav>
+<a href="#18u-boys-d1">18u Boys D1</a>
+<a href="#18u-girls-d1">18u Girls D1</a>
+<a href="#18-girls-d2">18 Girls D2</a>
+<a href="#18u-boys-d2">18u Boys D2</a>
+<a href="#coach-of-the-year">Coach of the Year</a>
+</nav>
+<section id="18u-boys-d1"><h2>18u Boys D1</h2><p>Loading...</p></section>
+<section id="18u-girls-d1"><h2>18u Girls D1</h2><p>Loading...</p></section>
+<section id="18-girls-d2"><h2>18 Girls D2</h2><p>Loading...</p></section>
+<section id="18u-boys-d2"><h2>18u Boys D2</h2><p>Loading...</p></section>
+<section id="coach-of-the-year"><h2>Coach of the Year</h2><p>Loading...</p></section>
+</main>
+<script>
+const SPREADSHEET_ID = '1U7pyiJaERE7xFcFSoIuEzaQJTUNAs7wuQBKWtGYaBHM';
+const PLAYER_DIVISIONS = [
+{ name: '18u Boys D1', voteTab: '18u Boys D1 Vote', sectionId: '18u-boys-d1' },
+{ name: '18u Girls D1', voteTab: '18u Girls D1 Vote', sectionId: '18u-girls-d1' },
+{ name: '18 Girls D2', voteTab: '18 Girls D2 Vote', sectionId: '18-girls-d2' },
+{ name: '18u Boys D2', voteTab: '18 Boys D2 Vote', sectionId: '18u-boys-d2' },
+];
+const COACH_VOTE_TAB = 'Coaches Vote';
+
+function sheetCsvUrl(tabName) {
+return `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tabName)}`;
+}
+
+async function fetchTab(tabName) {
+const resp = await fetch(sheetCsvUrl(tabName));
+if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching "${tabName}"`);
+const text = await resp.text();
+const parsed = Papa.parse(text, { header: false, skipEmptyLines: true });
+return parsed.data;
+}
+
+function isGoaliePosition(pos) {
+const p = (pos || '').trim().toLowerCase();
+return p === 'g' || p === 'gk' || p === 'goal' || p === 'goalie' ||
+p === 'goalkeeper' || p === 'goal keeper' || p === 'goaltender' ||
+p.includes('goali') || p.includes('goalkeeper') || p.includes('goaltend');
+}
+
+function parseRoster(rows) {
+if (!rows || rows.length < 2) return new Set();
+const headers = rows[0].map(h => (h || '').trim().toLowerCase());
+// Accept common variations of column names
+const teamIdx = headers.findIndex(h =>
+h === 'team name' || h === 'team' || h === 'club' || h === 'club name');
+const posIdx = headers.findIndex(h =>
+h === 'position' || h === 'pos' || h === 'role' || h === 'position/role');
+const nameIdx = headers.findIndex(h =>
+h === 'player name' || h === 'player' || h === 'name' || h === 'full name');
+const goalieLabels = new Set();
+if (nameIdx === -1 || teamIdx === -1) return goalieLabels;
+for (let i = 1; i < rows.length; i++) {
+const team = (rows[i][teamIdx] || '').trim();
+const position = posIdx >= 0 ? (rows[i][posIdx] || '').trim() : '';
+const name = (rows[i][nameIdx] || '').trim();
+if (!name || !team) continue;
+if (isGoaliePosition(position)) {
+goalieLabels.add(`${name} (${team})`);
+}
+}
+return goalieLabels;
+}
+
+// Parse vote tab headers to identify which columns hold which vote types.
+// Returns { mvpCol, firstGoalieCols, firstFieldCols, secondGoalieCols, secondFieldCols }
+// Falls back to hard-coded positional defaults when headers give no signal.
+function parseVoteColumns(headers) {
+const mvpCol = { idx: 1, fromHeader: false };
+const firstGoalieCols = [];
+const secondGoalieCols = [];
+const firstFieldCols = [];
+const secondFieldCols = [];
+let anySignal = false;
+
+for (let i = 0; i < headers.length; i++) {
+const h = (headers[i] || '').trim().toLowerCase();
+if (!h) continue;
+const isFirst = h.includes('1st') || h.includes('first');
+const isSecond = h.includes('2nd') || h.includes('second');
+const isGoalie = h.includes('goali') || h.includes('goalkeeper') ||
+h.includes('goaltend') || h.includes('goal keep') ||
+/\bgk\b/.test(h);
+const isMvp = h.includes('mvp') || h.includes('most valuable');
+
+if (isMvp) {
+mvpCol.idx = i;
+mvpCol.fromHeader = true;
+anySignal = true;
+} else if (isFirst && isGoalie) {
+firstGoalieCols.push(i);
+anySignal = true;
+} else if (isSecond && isGoalie) {
+secondGoalieCols.push(i);
+anySignal = true;
+} else if (isFirst) {
+firstFieldCols.push(i);
+anySignal = true;
+} else if (isSecond) {
+secondFieldCols.push(i);
+anySignal = true;
+}
+}
+
+// Fall back to hard-coded columns when headers give no useful signal
+if (!anySignal || (firstFieldCols.length === 0 && firstGoalieCols.length === 0)) {
+for (let c = 2; c <= 11; c++) firstFieldCols.push(c);
+for (let c = 12; c <= 21; c++) secondFieldCols.push(c);
+}
+
+return { mvpCol: mvpCol.idx, firstGoalieCols, firstFieldCols, secondGoalieCols, secondFieldCols };
+}
+
+function tabulatePlayerVotes(rows, rosterGoalies) {
+const headers = rows[0].map(h => (h || '').trim());
+const { mvpCol, firstGoalieCols, firstFieldCols, secondGoalieCols, secondFieldCols } =
+parseVoteColumns(headers);
+
+const tallies = {};
+// Track which players were voted into explicit goalie columns
+const voteGoalies = new Set();
+
+function credit(player, type) {
+if (!player) return;
+if (!tallies[player]) tallies[player] = { mvp: 0, first: 0, second: 0 };
+tallies[player][type] += 1;
+}
+
+for (let i = 1; i < rows.length; i++) {
+const row = rows[i];
+if (!row[0] || !row[0].trim()) continue;
+
+credit((row[mvpCol] || '').trim(), 'mvp');
+
+for (const c of firstGoalieCols) {
+const v = (row[c] || '').trim();
+if (v) { credit(v, 'first'); voteGoalies.add(v); }
+}
+for (const c of firstFieldCols) {
+credit((row[c] || '').trim(), 'first');
+}
+for (const c of secondGoalieCols) {
+const v = (row[c] || '').trim();
+if (v) { credit(v, 'second'); voteGoalies.add(v); }
+}
+for (const c of secondFieldCols) {
+credit((row[c] || '').trim(), 'second');
+}
+}
+
+// A player is a goalie if the roster says so OR if they were voted in goalie-specific columns
+const allGoalies = new Set([...rosterGoalies, ...voteGoalies]);
+
+return Object.entries(tallies).map(([player, t]) => ({
+player,
+mvp: t.mvp,
+first: t.first,
+second: t.second,
+total: t.mvp * 3 + t.first * 2 + t.second * 1,
+isGoalie: allGoalies.has(player),
+})).sort((a, b) => b.total - a.total);
+}
+
+function selectTopN(sorted, n) {
+const withPoints = sorted.filter(p => p.total > 0);
+if (withPoints.length <= n) return withPoints;
+const cutoff = withPoints[n - 1].total;
+return withPoints.filter(p => p.total >= cutoff);
+}
+
+function selectTeams(results) {
+const mvpScore = results.length > 0 ? results[0].total : 0;
+const mvps = mvpScore > 0 ? results.filter(r => r.total === mvpScore) : [];
+const mvpSet = new Set(mvps.map(m => m.player));
+const eligible = results.filter(r => !mvpSet.has(r.player));
+const goalies = eligible.filter(r => r.isGoalie);
+const field = eligible.filter(r => !r.isGoalie);
+const firstGoalieScore = goalies.length > 0 ? goalies[0].total : -1;
+const firstGoalies = goalies.filter(g => g.total === firstGoalieScore && g.total > 0);
+const firstField = selectTopN(field, 9);
+const usedGoalies = new Set(firstGoalies.map(g => g.player));
+const usedField = new Set(firstField.map(f => f.player));
+const remainGoalies = goalies.filter(g => !usedGoalies.has(g.player));
+const remainField = field.filter(f => !usedField.has(f.player));
+const secondGoalieScore = remainGoalies.length > 0 ? remainGoalies[0].total : -1;
+const secondGoalies = remainGoalies.filter(g => g.total === secondGoalieScore && g.total > 0);
+const secondField = selectTopN(remainField, 9);
+const onTeam = new Set([
+...mvps.map(m => m.player),
+...firstGoalies.map(g => g.player),
+...firstField.map(f => f.player),
+...secondGoalies.map(g => g.player),
+...secondField.map(f => f.player),
+]);
+const honorable = results.filter(r => !onTeam.has(r.player) && r.total > 3);
+return { mvps, mvpSet, firstGoalies, firstField, secondGoalies, secondField, honorable };
+}
+
+function buildTable(players, mvpSet) {
+const table = document.createElement('table');
+table.setAttribute('role', 'grid');
+const thead = document.createElement('thead');
+thead.innerHTML = '<tr><th>Player</th><th>MVP Votes</th><th>1st Team Votes</th><th>2nd Team Votes</th><th>Total Points</th></tr>';
+table.appendChild(thead);
+const tbody = document.createElement('tbody');
+players.forEach(r => {
+const tr = document.createElement('tr');
+const badge = mvpSet.has(r.player) ? ' <span class="mvp-badge">(MVP)</span>' : '';
+tr.innerHTML = `<td>${escapeHtml(r.player)}${badge}</td><td>${r.mvp}</td><td>${r.first}</td><td>${r.second}</td><td><strong>${r.total}</strong></td>`;
+tbody.appendChild(tr);
+});
+table.appendChild(tbody);
+return table;
+}
+
+function renderPlayerSection(sectionId, results) {
+const section = document.getElementById(sectionId);
+const h2 = section.querySelector('h2');
+section.innerHTML = '';
+section.appendChild(h2);
+if (results.length === 0) {
+const p = document.createElement('p');
+p.textContent = 'No votes recorded yet.';
+section.appendChild(p);
+return;
+}
+const { mvps, mvpSet, firstGoalies, firstField, secondGoalies, secondField, honorable } = selectTeams(results);
+if (mvps.length > 0) {
+const h3 = document.createElement('h3');
+h3.textContent = 'MVP';
+section.appendChild(h3);
+section.appendChild(buildTable(mvps, mvpSet));
+}
+if (firstGoalies.length > 0 || firstField.length > 0) {
+const h3 = document.createElement('h3');
+h3.textContent = '1st All-State Team';
+section.appendChild(h3);
+if (firstGoalies.length > 0) {
+const h4 = document.createElement('h4');
+h4.textContent = 'Goalie';
+section.appendChild(h4);
+section.appendChild(buildTable(firstGoalies, mvpSet));
+}
+if (firstField.length > 0) {
+const h4 = document.createElement('h4');
+h4.textContent = 'Field Players';
+section.appendChild(h4);
+section.appendChild(buildTable(firstField, mvpSet));
+}
+}
+if (secondGoalies.length > 0 || secondField.length > 0) {
+const h3 = document.createElement('h3');
+h3.textContent = '2nd All-State Team';
+section.appendChild(h3);
+if (secondGoalies.length > 0) {
+const h4 = document.createElement('h4');
+h4.textContent = 'Goalie';
+section.appendChild(h4);
+section.appendChild(buildTable(secondGoalies, mvpSet));
+}
+if (secondField.length > 0) {
+const h4 = document.createElement('h4');
+h4.textContent = 'Field Players';
+section.appendChild(h4);
+section.appendChild(buildTable(secondField, mvpSet));
+}
+}
+if (honorable.length > 0) {
+const h3 = document.createElement('h3');
+h3.textContent = 'Honorable Mention';
+section.appendChild(h3);
+section.appendChild(buildTable(honorable, mvpSet));
+}
+}
+
+function tabulateCoachVotes(rows) {
+const headers = rows[0];
+const results = {};
+for (let col = 1; col < headers.length; col++) {
+const ageGroup = (headers[col] || '').trim();
+if (!ageGroup) continue;
+results[ageGroup] = {};
+for (let i = 1; i < rows.length; i++) {
+const val = (rows[i][col] || '').trim();
+if (val && val !== '0') {
+results[ageGroup][val] = (results[ageGroup][val] || 0) + 1;
+}
+}
+}
+const sorted = {};
+for (const [ageGroup, coaches] of Object.entries(results)) {
+const arr = Object.entries(coaches).map(([coach, votes]) => ({ coach, votes }));
+arr.sort((a, b) => b.votes - a.votes);
+if (arr.length > 0) {
+sorted[ageGroup] = arr;
+}
+}
+return sorted;
+}
+
+function renderCoachTables(results) {
+const section = document.getElementById('coach-of-the-year');
+const h2 = section.querySelector('h2');
+section.innerHTML = '';
+section.appendChild(h2);
+const ageGroups = Object.keys(results);
+if (ageGroups.length === 0) {
+const p = document.createElement('p');
+p.textContent = 'No votes recorded yet.';
+section.appendChild(p);
+return;
+}
+for (const ageGroup of ageGroups) {
+const h3 = document.createElement('h3');
+h3.textContent = ageGroup;
+section.appendChild(h3);
+const table = document.createElement('table');
+table.setAttribute('role', 'grid');
+const thead = document.createElement('thead');
+thead.innerHTML = '<tr><th>Rank</th><th>Coach</th><th>Votes</th></tr>';
+table.appendChild(thead);
+const tbody = document.createElement('tbody');
+results[ageGroup].forEach((r, i) => {
+const tr = document.createElement('tr');
+tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(r.coach)}</td><td><strong>${r.votes}</strong></td>`;
+tbody.appendChild(tr);
+});
+table.appendChild(tbody);
+section.appendChild(table);
+}
+}
+
+function renderError(sectionId, message) {
+const section = document.getElementById(sectionId);
+const h2 = section.querySelector('h2');
+section.innerHTML = '';
+section.appendChild(h2);
+const p = document.createElement('p');
+p.className = 'error';
+p.textContent = message;
+section.appendChild(p);
+}
+
+function escapeHtml(str) {
+const div = document.createElement('div');
+div.textContent = str;
+return div.innerHTML;
+}
+
+async function main() {
+const playerPromises = PLAYER_DIVISIONS.map(async (div) => {
+try {
+const [voteRows, rosterRows] = await Promise.all([
+fetchTab(div.voteTab),
+fetchTab(div.name).catch(() => []),
+]);
+const rosterGoalies = parseRoster(rosterRows);
+const results = tabulatePlayerVotes(voteRows, rosterGoalies);
+renderPlayerSection(div.sectionId, results);
+} catch (err) {
+renderError(div.sectionId, `Failed to load: ${err.message}`);
+}
+});
+const coachPromise = (async () => {
+try {
+const rows = await fetchTab(COACH_VOTE_TAB);
+const results = tabulateCoachVotes(rows);
+renderCoachTables(results);
+} catch (err) {
+renderError('coach-of-the-year', `Failed to load: ${err.message}`);
+}
+})();
+await Promise.allSettled([...playerPromises, coachPromise]);
+}
+
+main();
+</script>
+</body>
+</html>
