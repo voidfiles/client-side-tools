@@ -1,27 +1,36 @@
 /**
  * lang.js — language core for the systems playground DSL.
  *
- * A superset of the lethain/systems notation
- * (https://github.com/lethain/systems/blob/master/docs/spec.md):
+ * Derived from the lethain/systems notation
+ * (https://github.com/lethain/systems/blob/master/docs/spec.md), with the
+ * same flow semantics but a stricter structure: every stock is declared
+ * up front, before any flow or formula uses it.
  *
- *   Stock(10)                          stock with initial value
- *   Stock(10, 50)                      stock with initial value and maximum
- *   [Boundary]                         infinite stock (hidden from output)
- *   a > b @ 2                          Rate flow (fixed units per round)
- *   a > b @ 0.5                        Conversion flow (bare decimal literal)
- *   a > b @ Leak(0.1)                  Leak flow (fraction of source, source keeps rest)
- *   name = expression                  auxiliary variable (extension)
+ *   # stock declarations come first:
+ *   #   Name(initial, max)? "description"? visible: true|false ?
+ *   [Candidates]  "Boundary: infinite applicant pool"
+ *   Screens       "Candidates in the phone-screen stage"
+ *   Staff(5)      "Current team" visible: false
+ *
+ *   # then flows and auxiliaries:
+ *   [Candidates] > Screens @ 25       Rate flow (fixed units per round)
+ *   Screens > Staff @ 0.5             Conversion flow (bare decimal literal)
+ *   Staff > [Gone] @ Leak(0.1)        Leak flow (fraction of source)
+ *   name = expression                 auxiliary variable
  *   # comment
  *
- * Expressions (extension over the original's `+ - * /`):
- *   parentheses, ^, unary minus, comparisons (< <= > >= == != <>),
- *   AND OR NOT, IF cond THEN a ELSE b, and the builtin functions in
- *   BUILTINS below (an XMILE-flavored standard library).
+ * `visible: false` hides a stock from the chart (it stays in the table and
+ * CSV). Infinite stocks are never shown.
  *
- * One deliberate divergence from lethain/systems: the original evaluates
- * formulas strictly left to right; this language uses standard operator
- * precedence. Formulas using a single operator (all of the published
- * examples) behave identically.
+ * Expressions: standard operator precedence, parentheses, ^, unary minus,
+ * comparisons (< <= > >= == != <>), AND OR NOT, true/false,
+ * IF cond THEN a ELSE b, and the builtin functions in BUILTINS below
+ * (an XMILE-flavored standard library).
+ *
+ * The engine's flow semantics (Rate/Conversion/Leak, reversed processing
+ * order, flooring) match lethain/systems exactly — see tests/ — but source
+ * files differ: the original declares stocks implicitly inside flows, this
+ * language requires the up-front declarations shown above.
  *
  * This module is dependency-free and runs on the main thread (editor
  * diagnostics/completion/hover), in the simulation worker, and under Node
@@ -30,7 +39,7 @@
 
 export const NAME_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
-const KEYWORDS = new Set(['if', 'then', 'else', 'and', 'or', 'not', 'inf']);
+const KEYWORDS = new Set(['if', 'then', 'else', 'and', 'or', 'not', 'inf', 'true', 'false']);
 const FLOW_TYPES = new Set(['rate', 'conversion', 'leak']);
 
 // ---------------------------------------------------------------------------
@@ -117,9 +126,10 @@ export const RANDOM_BUILTINS = new Set(['RANDOM', 'NORMAL', 'LOGNORMAL', 'EXPRND
 // ---------------------------------------------------------------------------
 
 const TOKEN_PATTERNS = [
+  ['string', /^"[^"\n]*"/],
   ['number', /^(?:\d+\.\d+|\d+\.?|\.\d+)/],
   ['name', /^[A-Za-z][A-Za-z0-9_]*/],
-  ['op', /^(?:<=|>=|==|!=|<>|[-+*/^<>=@(),[\]])/],
+  ['op', /^(?:<=|>=|==|!=|<>|[-+*/^<>=@(),:[\]])/],
 ];
 
 /**
@@ -145,6 +155,9 @@ export function tokenizeLine(line, base) {
       }
     }
     if (!matched) {
+      if (ch === '"') {
+        return { tokens, error: { from: base + i, to: base + line.length, message: 'Unterminated string — descriptions need a closing "' } };
+      }
       return { tokens, error: { from: base + i, to: base + i + 1, message: `Unexpected character '${ch}'` } };
     }
   }
@@ -319,6 +332,10 @@ function parseAtom(ts) {
       ts.next();
       return { type: 'num', value: Infinity, raw: 'inf', from: t.from, to: t.to };
     }
+    if (lower === 'true' || lower === 'false') {
+      ts.next();
+      return { type: 'num', value: lower === 'true' ? 1 : 0, raw: lower, from: t.from, to: t.to };
+    }
     if (KEYWORDS.has(lower)) {
       throw new ParseError(`Unexpected keyword '${t.text}' here`, t.from, t.to);
     }
@@ -388,11 +405,43 @@ function checkStockName(tok) {
   }
 }
 
+// Optional declaration attributes: "description" and `visible: true|false`.
+function parseStockAttributes(ts) {
+  let description = null;
+  let visible = null;
+  let visibleTok = null;
+  const t = ts.peek();
+  if (t && t.type === 'string') {
+    ts.next();
+    description = t.text.slice(1, -1);
+  }
+  const v = ts.peek();
+  if (v && v.type === 'name' && v.text.toLowerCase() === 'visible') {
+    ts.next();
+    ts.expect(':', "Expected ':' after 'visible'");
+    const b = ts.peek();
+    if (!b || b.type !== 'name' || !['true', 'false'].includes(b.text.toLowerCase())) {
+      throw ts.errorAtCurrent("Expected 'true' or 'false' after 'visible:'");
+    }
+    ts.next();
+    visible = b.text.toLowerCase() === 'true';
+    visibleTok = { from: v.from, to: b.to };
+  }
+  if (!ts.atEnd()) {
+    const rest = ts.peek();
+    if (rest.type === 'string') {
+      throw new ParseError("The description goes before 'visible:'", rest.from, rest.to);
+    }
+    throw new ParseError(`Unexpected '${rest.text}' after the stock declaration`, rest.from, rest.to);
+  }
+  return { description, visible, visibleTok };
+}
+
 /**
  * Parse one logical line into a statement (or null for blank/comment lines).
  * Statement kinds:
- *   { kind: 'stock', stock }                                — bare declaration
- *   { kind: 'flow', source, dest, flowType, rate }          — rate may be null ("a > b" declares only)
+ *   { kind: 'stock', stock, description, visible }          — up-front declaration
+ *   { kind: 'flow', source, dest, flowType, rate }
  *   { kind: 'aux', name, expr }                             — auxiliary definition
  */
 export function parseLine(line, base, lineNum) {
@@ -412,15 +461,14 @@ export function parseLine(line, base, lineNum) {
   }
 
   const source = parseStockEndpoint(ts);
-  if (ts.atEnd()) return { kind: 'stock', stock: source, line: lineNum };
-
-  ts.expect('>', "Expected '>' (flow), '(' (stock parameters), or '=' (auxiliary) here");
-  const dest = parseStockEndpoint(ts);
-  if (ts.atEnd()) {
-    // Compatible with lethain/systems: "a > b" declares both stocks but no flow.
-    return { kind: 'flow', source, dest, flowType: null, rate: null, line: lineNum };
+  if (ts.atEnd() || ts.peek().text !== '>') {
+    const { description, visible, visibleTok } = parseStockAttributes(ts);
+    return { kind: 'stock', stock: source, description, visible, visibleTok, line: lineNum };
   }
-  const at = ts.expect('@', "Expected '@' followed by the flow's rate");
+
+  ts.expect('>', "Expected '>' (flow) or end of declaration here");
+  const dest = parseStockEndpoint(ts);
+  const at = ts.expect('@', "Expected '@' followed by the flow's rate — flows always specify one");
 
   if (ts.atEnd()) throw new ParseError("Expected a rate expression after '@'", at.from, at.to);
 
@@ -463,19 +511,6 @@ export function parseLine(line, base, lineNum) {
 // Analyzer: parse a whole document, build symbol tables, collect diagnostics.
 // ---------------------------------------------------------------------------
 
-function exprKey(expr) {
-  // Canonical string for compare-on-redefinition (ConflictingValues semantics).
-  switch (expr.type) {
-    case 'num': return String(expr.value);
-    case 'ref': return expr.name;
-    case 'call': return `${expr.name.toUpperCase()}(${expr.args.map(exprKey).join(',')})`;
-    case 'un': return `(${expr.op} ${exprKey(expr.e)})`;
-    case 'bin': return `(${exprKey(expr.l)}${expr.op}${exprKey(expr.r)})`;
-    case 'if': return `IF(${exprKey(expr.cond)},${exprKey(expr.then)},${exprKey(expr.else)})`;
-    default: return '?';
-  }
-}
-
 function walkExpr(expr, visit) {
   visit(expr);
   switch (expr.type) {
@@ -517,7 +552,8 @@ function topoOrder(names, depsByName) {
  * Analyze a full document. Returns:
  * {
  *   statements, diagnostics,
- *   stocks: Map<name, {name, infinite, initial, maximum, declFrom, declTo, hasFlows}>,
+ *   stocks: Map<name, {name, infinite, initial, maximum, description, visible,
+ *                      declFrom, declTo, declLine, hasFlows, referenced}>,
  *   auxes:  Map<name, {name, expr, declFrom, declTo}>,
  *   flows:  [{source, dest, flowType, rate, line}],
  *   stockOrder, auxOrder, initialOrder,   // evaluation orders
@@ -551,91 +587,102 @@ export function analyze(text) {
     offset += line.length + 1;
   }
 
-  // Pass 1: declare stocks and auxes.
-  const declareStock = (ep) => {
-    let s = stocks.get(ep.name);
-    if (!s) {
-      s = {
-        name: ep.name, infinite: ep.infinite, initial: ep.initial, maximum: ep.maximum,
-        declFrom: ep.nameFrom, declTo: ep.nameTo, hasFlows: false, referenced: false,
-      };
-      stocks.set(ep.name, s);
-      return s;
-    }
-    // Redeclaration: replicate lethain/systems ConflictingValues rules —
-    // a later explicit value is only allowed if the stock didn't have one yet.
-    if (ep.infinite !== s.infinite) {
-      err(ep.nameFrom, ep.nameTo, `'${ep.name}' is declared both as a normal and as an infinite stock`);
-      return s;
-    }
-    if (ep.initial) {
-      if (s.initial && exprKey(s.initial) !== exprKey(ep.initial)) {
-        err(ep.initial.from, ep.initial.to, `Stock '${ep.name}' already has an initial value — it can only be set once`);
-      } else if (s.initial) {
-        err(ep.initial.from, ep.initial.to, `Stock '${ep.name}' is initialized twice (lethain/systems rejects this too)`);
-      } else {
-        s.initial = ep.initial;
-      }
-    }
-    if (ep.maximum) {
-      if (s.maximum) {
-        err(ep.maximum.from, ep.maximum.to, `Stock '${ep.name}' already has a maximum — it can only be set once`);
-      } else {
-        s.maximum = ep.maximum;
-      }
-    }
-    return s;
-  };
-
+  // Pass 1: collect declarations. Stocks are only created by declaration
+  // lines — flows reference stocks declared on earlier lines.
   for (const stmt of statements) {
     if (stmt.kind === 'stock') {
-      declareStock(stmt.stock);
-    } else if (stmt.kind === 'flow') {
-      const src = declareStock(stmt.source);
-      const dst = declareStock(stmt.dest);
-      if (stmt.rate !== null) {
-        src.hasFlows = dst.hasFlows = true;
-        flows.push(stmt);
-        if ((stmt.flowType === 'conversion' || stmt.flowType === 'leak') && src.infinite) {
-          err(stmt.source.nameFrom, stmt.source.nameTo,
-            `A ${stmt.flowType} flow can't drain the infinite stock '${src.name}'`);
-        }
-      } else {
-        warn(stmt.source.nameFrom, stmt.dest.nameTo,
-          "Flow without '@ rate' only declares its stocks — no units will move");
+      const ep = stmt.stock;
+      if (stocks.has(ep.name)) {
+        err(ep.nameFrom, ep.nameTo, `Stock '${ep.name}' is declared twice`);
+        continue;
       }
+      if (ep.infinite && (ep.initial || ep.maximum)) {
+        err(ep.from, ep.to, `Infinite stock '${ep.name}' can't take an initial value or maximum`);
+      }
+      if (ep.infinite && stmt.visible === true) {
+        warn(stmt.visibleTok.from, stmt.visibleTok.to, `Infinite stocks are never shown — 'visible: true' has no effect on '${ep.name}'`);
+      }
+      stocks.set(ep.name, {
+        name: ep.name, infinite: ep.infinite, initial: ep.initial, maximum: ep.maximum,
+        description: stmt.description, visible: stmt.visible,
+        declFrom: ep.nameFrom, declTo: ep.nameTo, declLine: stmt.line,
+        hasFlows: false, referenced: false,
+      });
     } else if (stmt.kind === 'aux') {
       if (auxes.has(stmt.name)) {
         err(stmt.nameFrom, stmt.nameTo, `Auxiliary '${stmt.name}' is defined twice`);
-      } else if (stocks.has(stmt.name)) {
-        err(stmt.nameFrom, stmt.nameTo, `'${stmt.name}' is already a stock — pick a different auxiliary name`);
       } else {
-        auxes.set(stmt.name, { name: stmt.name, expr: stmt.expr, declFrom: stmt.nameFrom, declTo: stmt.nameTo });
+        auxes.set(stmt.name, { name: stmt.name, expr: stmt.expr, declFrom: stmt.nameFrom, declTo: stmt.nameTo, line: stmt.line });
       }
     }
   }
   for (const stmt of statements) {
     if (stmt.kind === 'stock' && auxes.has(stmt.stock.name)) {
-      err(stmt.stock.nameFrom, stmt.stock.nameTo, `'${stmt.stock.name}' is already an auxiliary — pick a different stock name`);
+      err(stmt.stock.nameFrom, stmt.stock.nameTo, `'${stmt.stock.name}' is also an auxiliary — pick a different name`);
     }
   }
 
-  // Pass 2: resolve references and validate calls.
+  // A stock use (flow endpoint or formula reference) must come after the
+  // stock's declaration line.
+  const checkStockUse = (name, from, to, line) => {
+    const s = stocks.get(name);
+    if (!s) {
+      err(from, to, `Reference to undeclared stock '${name}' — stocks are declared up front`, [
+        { kind: 'declare-stock', name },
+      ]);
+      return null;
+    }
+    if (line !== undefined && s.declLine > line) {
+      err(from, to, `Stock '${name}' is used before its declaration on line ${s.declLine} — declarations go up front`);
+    }
+    return s;
+  };
+
+  // Pass 2: resolve flows against the declarations.
+  for (const stmt of statements) {
+    if (stmt.kind !== 'flow') continue;
+    flows.push(stmt);
+    for (const ep of [stmt.source, stmt.dest]) {
+      if (ep.initial || ep.maximum) {
+        const declText = text.slice(ep.from, ep.to);
+        err(ep.from, ep.to,
+          `Stocks are declared up front — move '${declText}' to its own line before the flows`, [
+            { kind: 'hoist-decl', name: ep.name, declText, epFrom: ep.from, epTo: ep.to },
+          ]);
+        // The hoist fix declares the stock, so don't also report it undeclared.
+        if (!stocks.has(ep.name)) continue;
+      }
+      const s = checkStockUse(ep.name, ep.nameFrom, ep.nameTo, stmt.line);
+      if (!s) continue;
+      s.hasFlows = true;
+      if (ep.infinite && !s.infinite) {
+        err(ep.nameFrom, ep.nameTo, `'${ep.name}' isn't an infinite stock — it was declared without [ ]`);
+      }
+    }
+    const src = stocks.get(stmt.source.name);
+    if ((stmt.flowType === 'conversion' || stmt.flowType === 'leak') && src && src.infinite) {
+      err(stmt.source.nameFrom, stmt.source.nameTo,
+        `A ${stmt.flowType} flow can't drain the infinite stock '${src.name}'`);
+    }
+  }
+
+  // Pass 3: resolve references inside formulas and validate calls.
   let usesRandom = false;
-  const knownName = (n) => stocks.has(n) || auxes.has(n);
-  const checkExpr = (expr, { where, allowAux }) => {
+  const checkExpr = (expr, { where, allowAux, line }) => {
     if (!expr) return;
     walkExpr(expr, (e) => {
       if (e.type === 'ref') {
-        if (!knownName(e.name)) {
+        if (stocks.has(e.name)) {
+          const s = checkStockUse(e.name, e.from, e.to, line);
+          if (s) s.referenced = true;
+        } else if (auxes.has(e.name)) {
+          if (!allowAux) {
+            err(e.from, e.to, `${where} can't reference the auxiliary '${e.name}' — only stocks`);
+          }
+        } else {
           err(e.from, e.to, `Reference to undefined ${allowAux ? 'stock or auxiliary' : 'stock'} '${e.name}'`, [
             { kind: 'declare-stock', name: e.name },
           ]);
-        } else if (!allowAux && auxes.has(e.name)) {
-          err(e.from, e.to, `${where} can't reference the auxiliary '${e.name}' — only stocks`);
-        } else {
-          const s = stocks.get(e.name);
-          if (s) s.referenced = true;
         }
       } else if (e.type === 'call') {
         const b = BUILTINS[e.name.toUpperCase()];
@@ -654,11 +701,11 @@ export function analyze(text) {
   };
 
   for (const s of stocks.values()) {
-    checkExpr(s.initial, { where: `The initial value of '${s.name}'`, allowAux: false });
-    checkExpr(s.maximum, { where: `The maximum of '${s.name}'`, allowAux: true });
+    checkExpr(s.initial, { where: `The initial value of '${s.name}'`, allowAux: false, line: s.declLine });
+    checkExpr(s.maximum, { where: `The maximum of '${s.name}'`, allowAux: true, line: s.declLine });
   }
-  for (const a of auxes.values()) checkExpr(a.expr, { where: `Auxiliary '${a.name}'`, allowAux: true });
-  for (const f of flows) checkExpr(f.rate, { where: 'A flow rate', allowAux: true });
+  for (const a of auxes.values()) checkExpr(a.expr, { where: `Auxiliary '${a.name}'`, allowAux: true, line: a.line });
+  for (const f of flows) checkExpr(f.rate, { where: 'A flow rate', allowAux: true, line: f.line });
 
   // Pass 3: ordering. Initial values may reference other stocks (no cycles);
   // auxiliaries may reference stocks and other auxiliaries (no aux cycles).

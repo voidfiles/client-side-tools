@@ -36,11 +36,13 @@ const systemsLanguage = StreamLanguage.define({
   token(stream) {
     if (stream.match(/#.*/)) return 'comment';
     if (stream.eatSpace()) return null;
+    if (stream.match(/"[^"\n]*"?/)) return 'string';
     if (stream.match(/\d+\.\d+|\d+\.?|\.\d+/)) return 'number';
     if (stream.match(/[A-Za-z][A-Za-z0-9_]*/)) {
       const word = stream.current();
       const lower = word.toLowerCase();
-      if (lower === 'inf') return 'atom';
+      if (lower === 'inf' || lower === 'true' || lower === 'false') return 'atom';
+      if (lower === 'visible' && /^\s*:/.test(stream.string.slice(stream.pos))) return 'propertyName';
       if (KEYWORD_WORDS.has(lower)) return 'keyword';
       if (FLOW_WORDS.has(lower) && stream.peek() === '(') return 'keyword';
       if (BUILTINS[word.toUpperCase()] && stream.peek() === '(') return 'variableName.function';
@@ -79,14 +81,30 @@ function lintSource(view) {
     to: Math.min(Math.max(d.to, d.from + 1), max),
     severity: d.severity,
     message: d.message,
-    actions: (d.actions || [])
-      .filter((a) => a.kind === 'declare-stock')
-      .map((a) => ({
-        name: `Declare stock '${a.name}'`,
-        apply(v) {
-          v.dispatch({ changes: { from: 0, insert: `${a.name}(0)\n` } });
-        },
-      })),
+    actions: (d.actions || []).map((a) => {
+      if (a.kind === 'declare-stock') {
+        return {
+          name: `Declare stock '${a.name}'`,
+          apply(v) {
+            v.dispatch({ changes: { from: 0, insert: `${a.name}(0)\n` } });
+          },
+        };
+      }
+      if (a.kind === 'hoist-decl') {
+        return {
+          name: `Move '${a.declText}' to a declaration up front`,
+          apply(v) {
+            v.dispatch({
+              changes: [
+                { from: 0, insert: `${a.declText}\n` },
+                { from: a.epFrom, to: a.epTo, insert: a.name },
+              ],
+            });
+          },
+        };
+      }
+      return null;
+    }).filter(Boolean),
   }));
 }
 
@@ -95,7 +113,7 @@ function completionSource(context) {
   if (!word && !context.explicit) return null;
   const options = [];
   for (const s of lastAnalysis.stocks.values()) {
-    options.push({ label: s.name, type: 'variable', detail: s.infinite ? 'infinite stock' : 'stock' });
+    options.push({ label: s.name, type: 'variable', detail: s.infinite ? 'infinite stock' : 'stock', info: s.description || undefined });
   }
   for (const a of lastAnalysis.auxes.values()) {
     options.push({ label: a.name, type: 'variable', detail: 'auxiliary' });
@@ -160,8 +178,14 @@ const hoverDocs = hoverTooltip((view, pos) => {
       if (builtin && !stock && !aux) {
         dom.innerHTML = `<strong>${builtin.sig}</strong><br>${builtin.doc}`;
       } else {
-        const kind = stock ? (stock.infinite ? 'infinite stock' : 'stock') : 'auxiliary';
+        let kind = stock ? (stock.infinite ? 'infinite stock' : 'stock') : 'auxiliary';
+        if (stock && stock.visible === false) kind += ', hidden from chart';
         dom.innerHTML = `<strong>${word}</strong> — ${kind}`;
+        if (stock && stock.description) {
+          const desc = document.createElement('div');
+          desc.textContent = stock.description;
+          dom.appendChild(desc);
+        }
         const series = lastResult && lastResult.series.get(word);
         if (series) {
           const final = series[series.length - 1];
@@ -291,7 +315,10 @@ function handleResult(msg) {
     for (let r = 0; r <= rounds; r++) values[r] = rows[r * rowLen + c];
     series.set(col.name, values);
   });
-  lastResult = { columns, series, rounds, issues, ms };
+  lastResult = {
+    columns, series, rounds, issues, ms,
+    chartCols: columns.filter((c) => c.visible !== false),
+  };
 
   renderChart();
   renderTable();
@@ -328,18 +355,20 @@ let chartColumns = '';
 
 function chartData() {
   const xs = Array.from({ length: lastResult.rounds + 1 }, (_, i) => i);
-  return [xs, ...lastResult.columns.map((c) => lastResult.series.get(c.name))];
+  return [xs, ...lastResult.chartCols.map((c) => lastResult.series.get(c.name))];
 }
 
 function renderChart() {
   const container = $('chart');
-  const key = lastResult.columns.map((c) => `${c.kind}:${c.name}`).join(',');
+  const key = lastResult.chartCols.map((c) => `${c.kind}:${c.name}`).join(',');
   if (!chart || chartColumns !== key) {
     if (chart) { chart.destroy(); chart = null; }
     container.textContent = '';
     chartColumns = key;
-    if (!lastResult.columns.length) {
-      container.innerHTML = '<p class="empty">Add a flow to see results — e.g. <code>[a] &gt; b @ 2</code></p>';
+    if (!lastResult.chartCols.length) {
+      container.innerHTML = lastResult.columns.length
+        ? '<p class="empty">All series are hidden (<code>visible: false</code>) — they\'re still in the table below.</p>'
+        : '<p class="empty">Declare stocks and add a flow to see results — e.g. <code>[a]</code>, <code>b</code>, then <code>[a] &gt; b @ 2</code></p>';
       return;
     }
     const opts = {
@@ -352,7 +381,7 @@ function renderChart() {
       ],
       series: [
         { label: 'round' },
-        ...lastResult.columns.map((c, i) => ({
+        ...lastResult.chartCols.map((c, i) => ({
           label: c.kind === 'aux' ? `${c.name} (aux)` : c.name,
           stroke: PALETTE[i % PALETTE.length],
           width: 2,

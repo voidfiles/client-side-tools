@@ -98,7 +98,8 @@ function evaluate(expr, env) {
  * @param analysis  result of lang.analyze() — must be error-free
  * @param opts      { rounds = 10, seed = 42 }
  * @returns {
- *   columns: [{ name, kind: 'stock'|'aux' }],   // hidden (infinite) stocks excluded
+ *   columns: [{ name, kind: 'stock'|'aux', visible }],  // infinite stocks excluded;
+ *                                                       // visible:false = keep out of the chart
  *   rows: rounds+1 arrays of numbers,
  *   issues: [{ round, message }],
  * }
@@ -111,11 +112,12 @@ export function run(analysis, opts = {}) {
   const issues = new RuntimeIssues();
   const rng = mulberry32(seed);
 
-  const visibleStocks = [...stocks.values()].filter((s) => !s.infinite).map((s) => s.name);
+  const tableStocks = [...stocks.values()].filter((s) => !s.infinite);
+  const visibleStocks = tableStocks.map((s) => s.name);
   const auxNames = auxOrder;
   const columns = [
-    ...visibleStocks.map((name) => ({ name, kind: 'stock' })),
-    ...auxNames.map((name) => ({ name, kind: 'aux' })),
+    ...tableStocks.map((s) => ({ name: s.name, kind: 'stock', visible: s.visible !== false })),
+    ...auxNames.map((name) => ({ name, kind: 'aux', visible: true })),
   ];
   if ((rounds + 1) * Math.max(1, columns.length) > MAX_CELLS) {
     throw new Error(`Model too large: ${rounds} rounds × ${columns.length} columns exceeds the playground budget`);

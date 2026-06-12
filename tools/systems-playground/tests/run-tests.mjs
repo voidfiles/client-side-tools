@@ -9,8 +9,11 @@
  * the expected per-round table or the Python exception type for models
  * the original rejects.
  *
- * The fixture sources live in lethain/systems' examples/ directory and in
- * the inline `SOURCES` map below.
+ * The playground language requires stocks to be declared up front, so the
+ * sources below are the lethain/systems models rewritten in that form —
+ * declarations first (in the original's stock order, so columns line up),
+ * then the original flow lines. The engine semantics under test are
+ * unchanged: the expected tables come straight from the Python original.
  *
  * Usage: node tools/systems-playground/tests/run-tests.mjs
  */
@@ -24,13 +27,14 @@ import { run } from '../engine.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = JSON.parse(readFileSync(join(here, 'fixtures.json'), 'utf8'));
 
-// Model sources, keyed by fixture name prefix. The *.txt entries are
-// verbatim copies of lethain/systems examples/ (MIT licensed).
 const SOURCES = {
   'extended_syntax.txt': `[Candidate]
 Recruiter(5)
 EngRecruiter(1, Recruiter)
 MgrRecruiter(1, Recruiter)
+Hire
+Departure
+[Departed]
 
 Recruiter > EngRecruiter @ Rate(Recruiter * 2)
 Recruiter > MgrRecruiter @ Rate(Recruiter * 1)
@@ -40,36 +44,56 @@ Recruiter > MgrRecruiter @ Rate(Recruiter * 1)
 Hire > Departure @ Leak(0.1)
 Departure > [Departed] @ 1.0
 `,
-  'fake_flow.txt': `b > d @ Invalid(5)
+  'fake_flow.txt': `b
+d
+e
+b > d @ Invalid(5)
 d > e @ Fake(5)
 `,
-  'hiring.txt': `# wrap with [] to indicate an infinite stock that
-# isn't included in each table
-# integers are implicitly steady rates
-[Candidates] > PhoneScreens @ 25
+  'hiring.txt': `[Candidates]
+PhoneScreens
+Onsites
+Offers
+Hires
+Employees(5)
+Departures
+[Departed]
 
-# floats are implicitly conversions that convert the
-# source stock into the destination stock at a discount
-# e.g. a source at 10 with a 0.5 conversion would empty
-# itself and add 5 units to the destination
+[Candidates] > PhoneScreens @ 25
 PhoneScreens > Onsites      @ 0.5
 Onsites      > Offers       @ 0.5
 Offers       > Hires        @ 0.5
-Hires        > Employees(5) @ 1.0
-
-# specify leak to avoid a destructive conversion
+Hires        > Employees    @ 1.0
 Employees    > Departures   @ Leak(0.1)
 Departures   > [Departed]   @ 1.0
 `,
-  'illegal_maximum.txt': `# illegal maximum on line 4
+  'illegal_maximum.txt': `# "illegal" initial above the maximum — the original runs it anyway
+a(5, 5)
+b
+c(5, 3)
+d
 a > b @ 1
-a(5, 5) > c @ 1
-c(5, 3) > d @ 1
+a > c @ 1
+c > d @ 1
 `,
-  'invalid_flow.txt': `a > b @ 0..2
+  'invalid_flow.txt': `a
+b
+c
+a > b @ 0..2
 b > c @ .2
 `,
-  'links.txt': `[PossibleRecruiters] > Recruiters(10, 15) @ 1
+  'links.txt': `[PossibleRecruiters]
+Recruiters(10, 15)
+[Candidates]
+PhoneScreens
+Onsites
+Offers
+Hires
+Employees
+Departures
+[Departed]
+
+[PossibleRecruiters] > Recruiters @ 1
 
 [Candidates] > PhoneScreens @ Recruiters * 3
 PhoneScreens > Onsites      @ 0.5
@@ -79,45 +103,66 @@ Hires        > Employees    @ 1.0
 Employees    > Departures   @ Leak(0.1)
 Departures   > [Departed]   @ 1.0
 `,
-  'maximums.txt': `[a] > b @ 10
-b(0, 5) > c(0, 10) @ 5
+  'maximums.txt': `[a]
+b(0, 5)
+c(0, 10)
+[a] > b @ 10
+b > c @ 5
 `,
-  'no_delim.txt': `[a] < b @ 25
+  'no_delim.txt': `[a]
+b
+[a] < b @ 25
 [a] > b * 0.25
 `,
-  'projects.txt': `[Hires] > Developers @ 1
+  'projects.txt': `[Hires]
+Developers
+[Ideas]
+Projects
+Started
+Finished
+[Hires] > Developers @ 1
 [Ideas] > Projects   @ Developers / (Projects+1)
 Projects > Started   @ Developers - (Started+1)
 Started > Finished   @ Developers
 `,
-  readme_hiring: `[Candidates] > PhoneScreens @ Recruiters * 3
+  readme_hiring: `[Candidates]
+PhoneScreens
+Onsites
+Offers
+Hires
+Employees
+Departures
+[Departed]
+Recruiters(3)
+
+[Candidates] > PhoneScreens @ Recruiters * 3
 PhoneScreens > Onsites @ 0.5
 Onsites > Offers @ 0.5
 Offers > Hires @ 0.5
 Hires > Employees @ 1.0
 Employees > Departures @ Leak(0.1)
 Departures > [Departed] @ 1.0
-Recruiters(3)
 `,
   initial_refs: `Managers(2)
 Engineers(Managers * 4, Managers * 8)
+[Candidates]
 [Candidates] > Engineers @ 1
 [Candidates] > Managers @ 1
 `,
-  rate_clamp: 'a(3) > b @ 5\n',
-  max_capacity: '[a] > b(0, 7) @ 3\n',
-  conversion_capacity: 'a(10) > b(0, 4) @ 0.5\n',
-  leak_capacity: 'a(100) > b(0, 30) @ Leak(0.5)\n',
-  negative_rate: 'a(5) > b @ 0 - 2\n',
-  explicit_rate_decimal: 'a(10) > b @ Rate(0.5)\n',
-  conversion_floor: 'a(7) > b @ 0.5\n',
-  chain_order: 'a(10) > b @ 2\nb > c @ 2\n',
-  multi_outflow: 'a(10) > b @ 6\na > c @ 6\n',
-  conversion_overdrain: 'a(2) > b(0, 100) @ 0.5\n',
-  conversion_one: 'a(10) > b @ 1.0\nb > c @ 0.5\n',
-  leak_then_refill: '[src] > a @ 3\na > b @ Leak(0.5)\n',
-  max_formula: 'Managers(2)\n[Candidates] > Engineers(0, Managers * 3) @ 2\n',
-  rate_formula_div: '[Hires] > Developers @ 1\n[Ideas] > Projects @ Developers / (Projects + 1)\n',
+  rate_clamp: 'a(3)\nb\na > b @ 5\n',
+  max_capacity: '[a]\nb(0, 7)\n[a] > b @ 3\n',
+  conversion_capacity: 'a(10)\nb(0, 4)\na > b @ 0.5\n',
+  leak_capacity: 'a(100)\nb(0, 30)\na > b @ Leak(0.5)\n',
+  negative_rate: 'a(5)\nb\na > b @ 0 - 2\n',
+  explicit_rate_decimal: 'a(10)\nb\na > b @ Rate(0.5)\n',
+  conversion_floor: 'a(7)\nb\na > b @ 0.5\n',
+  chain_order: 'a(10)\nb\nc\na > b @ 2\nb > c @ 2\n',
+  multi_outflow: 'a(10)\nb\nc\na > b @ 6\na > c @ 6\n',
+  conversion_overdrain: 'a(2)\nb(0, 100)\na > b @ 0.5\n',
+  conversion_one: 'a(10)\nb\nc\na > b @ 1.0\nb > c @ 0.5\n',
+  leak_then_refill: '[src]\na\nb\n[src] > a @ 3\na > b @ Leak(0.5)\n',
+  max_formula: 'Managers(2)\n[Candidates]\nEngineers(0, Managers * 3)\n[Candidates] > Engineers @ 2\n',
+  rate_formula_div: '[Hires]\nDevelopers\n[Ideas]\nProjects\n[Hires] > Developers @ 1\n[Ideas] > Projects @ Developers / (Projects + 1)\n',
 };
 
 const decode = (v) => (v === 'inf' ? Infinity : v === 'nan' ? NaN : v);
@@ -197,10 +242,15 @@ function expect(name, cond, detail = '') {
 
 {
   // Auxiliaries + builtins + determinism.
-  const src = `[Pool] > Hires @ HiringRate
+  const src = `[Pool]
+Hires
 Staff(10)
+Departures
+
+[Pool] > Hires @ HiringRate
 Hires > Staff @ 1.0
 Staff > Departures @ Leak(0.1)
+
 HiringRate = MAX(2, ROUND(Staff * 0.2))
 Pressure = IF Staff > 20 THEN 1 ELSE 0
 `;
@@ -218,8 +268,30 @@ Pressure = IF Staff > 20 THEN 1 ELSE 0
 }
 
 {
+  // Declarations: descriptions and visibility flags.
+  const src = `[Pool]
+A(1) "stock A, hidden from the chart" visible: false
+B "stock B"
+
+[Pool] > A @ 2
+A > B @ Leak(0.5)
+`;
+  const a = analyze(src);
+  expect('decl/attrs analyze', !hasErrors(a),
+    a.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message).join(' | '));
+  expect('decl/description', a.stocks.get('A')?.description === 'stock A, hidden from the chart'
+    && a.stocks.get('B')?.description === 'stock B');
+  expect('decl/visible flag', a.stocks.get('A')?.visible === false && a.stocks.get('B')?.visible === null);
+  const r = run(a, { rounds: 5 });
+  const byName = Object.fromEntries(r.columns.map((c) => [c.name, c]));
+  expect('decl/column visibility', byName.A.visible === false && byName.B.visible === true,
+    JSON.stringify(r.columns));
+  expect('decl/hidden stays in table', r.columns.some((c) => c.name === 'A'));
+}
+
+{
   // Seeded randomness: same seed reproduces, different seed differs.
-  const src = '[Pool] > Arrivals @ POISSON(4)\n';
+  const src = '[Pool]\nArrivals\n[Pool] > Arrivals @ POISSON(4)\n';
   const a = analyze(src);
   expect('ext/random analyze', !hasErrors(a));
   const r1 = run(a, { rounds: 20, seed: 1 });
@@ -231,7 +303,7 @@ Pressure = IF Staff > 20 THEN 1 ELSE 0
 
 {
   // Test-input builtins.
-  const src = '[Pool] > Output @ STEP(5, 3) + PULSE(10, 2, 4)\n';
+  const src = '[Pool]\nOutput\n[Pool] > Output @ STEP(5, 3) + PULSE(10, 2, 4)\n';
   const a = analyze(src);
   expect('ext/test-inputs analyze', !hasErrors(a));
   const r = run(a, { rounds: 8 });
@@ -245,13 +317,19 @@ Pressure = IF Staff > 20 THEN 1 ELSE 0
 {
   // Domain diagnostics.
   const cases = [
-    ['undefined ref', '[a] > b @ Recruiters * 2\n', 'undefined'],
-    ['leak from infinite', '[a] > b @ Leak(0.5)\n', "can't drain"],
+    ['undefined ref', '[a]\nb\n[a] > b @ Recruiters * 2\n', 'undefined'],
+    ['undeclared flow stock', '[a]\n[a] > b @ 1\n', 'undeclared'],
+    ['use before declaration', '[a] > b @ 1\n[a]\nb\n', 'before its declaration'],
+    ['inline decl in flow', '[a]\nb\n[a] > b(5) @ 1\n', 'up front'],
+    ['leak from infinite', '[a]\nb\n[a] > b @ Leak(0.5)\n', "can't drain"],
     ['aux cycle', 'x = y + 1\ny = x + 1\n', 'cycle'],
-    ['initial cycle', 'a(b)\nb(a)\na > b @ 1\n', 'cycle'],
-    ['unknown fn', '[a] > b @ FOO(1)\n', 'Unknown function'],
-    ['arity', '[a] > b @ MIN(1)\n', 'argument'],
-    ['double init', 'a(1) > b @ 1\na(2) > c @ 1\n', 'initial value'],
+    ['self-referencing initial', 'a(a)\nb\na > b @ 1\n', 'cycle'],
+    ['unknown fn', '[a]\nb\n[a] > b @ FOO(1)\n', 'Unknown function'],
+    ['arity', '[a]\nb\n[a] > b @ MIN(1)\n', 'argument'],
+    ['declared twice', 'a(1)\na(2)\nb\na > b @ 1\n', 'declared twice'],
+    ['bracket mismatch', 'a\nb\n[a] > b @ 1\n', "isn't an infinite stock"],
+    ['flow without rate', 'a\nb\na > b\n', "'@'"],
+    ['infinite with params', 'a\nb\na > b @ 1\nc = a\n[c]\n', 'auxiliary'],
   ];
   for (const [name, src, needle] of cases) {
     const a = analyze(src);

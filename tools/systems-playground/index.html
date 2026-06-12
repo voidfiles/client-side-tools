@@ -220,11 +220,12 @@
         <header>
             <h1>Systems Modeling Playground</h1>
             <p>
-                A language-first system dynamics playground: write stock-and-flow models in a
-                superset of the <a href="https://github.com/lethain/systems">lethain/systems</a>
-                notation and get live diagnostics, charts, and a per-round table as you type.
-                Everything runs in your browser; share models with the Share button (the model is
-                compressed into the URL, no server involved).
+                A language-first system dynamics playground: declare your stocks, wire them up with
+                flows in a notation derived from
+                <a href="https://github.com/lethain/systems">lethain/systems</a>, and get live
+                diagnostics, charts, and a per-round table as you type. Everything runs in your
+                browser; share models with the Share button (the model is compressed into the URL,
+                no server involved).
             </p>
         </header>
 
@@ -259,30 +260,33 @@
             <summary>Language reference</summary>
             <div class="ref-body">
                 <div>
-                    <h3>Stocks &amp; flows (lethain/systems compatible)</h3>
-                    <pre>Recruiters(3)        # stock, initial 3
-Pipeline(0, 50)      # initial 0, max 50
-[Candidates]         # infinite stock (hidden)
-
-# source &gt; destination @ rate
+                    <h3>Stocks: declared up front</h3>
+                    <pre># Name(initial, max)? "description"? visible: bool?
+Recruiters(3)   "Recruiting team"
+Pipeline(0, 50) "Capped at 50"
+Departures      "Hidden from chart" visible: false
+[Candidates]    "Infinite boundary stock (never shown)"</pre>
+                    <ul>
+                        <li>Every stock is declared before the flows that use it.</li>
+                        <li>Descriptions show up in hover docs and autocomplete.</li>
+                        <li><code>visible: false</code> keeps a stock out of the chart; it stays in the table and CSV.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Flows &amp; auxiliaries</h3>
+                    <pre># source &gt; destination @ rate
 [Candidates] &gt; Screens @ Recruiters * 3
 Screens &gt; Onsites @ 0.5        # decimal = Conversion
 Staff &gt; Departures @ Leak(0.1) # fraction leaks out
-a &gt; b @ Rate(2)                # explicit Rate</pre>
+a &gt; b @ Rate(2)                # explicit Rate
+
+# auxiliaries: recomputed every round
+ChurnRate = IF Active &gt; 500 THEN 0.08 ELSE 0.04</pre>
                     <ul>
                         <li><strong>Rate(n)</strong> — up to n units move per round.</li>
                         <li><strong>Conversion(f)</strong> — drains the source; destination gains ⌊source·f⌋.</li>
                         <li><strong>Leak(f)</strong> — moves ⌊source·f⌋, source keeps the rest.</li>
-                    </ul>
-                </div>
-                <div>
-                    <h3>Extensions</h3>
-                    <pre># auxiliaries: recomputed every round
-ChurnRate = IF Active &gt; 500 THEN 0.08 ELSE 0.04
-Active &gt; [Gone] @ Leak(ChurnRate)</pre>
-                    <ul>
-                        <li>Standard operator precedence, parentheses, <code>^</code>, comparisons, <code>AND OR NOT</code>, <code>IF…THEN…ELSE</code>.</li>
-                        <li>Trailing <code>#</code> comments.</li>
+                        <li>Standard operator precedence, parentheses, <code>^</code>, comparisons, <code>AND OR NOT</code>, <code>true/false</code>, <code>IF…THEN…ELSE</code>, trailing <code>#</code> comments.</li>
                         <li>All randomness is seeded — identical seed ⇒ identical run.</li>
                     </ul>
                 </div>

@@ -6,10 +6,11 @@ report in [`research/systems-modeling-playground.md`](../../research/systems-mod
 
 ## What it does
 
-- **A text language for stock-and-flow models** — a superset of the
-  lethain/systems notation. Models written for the original Python tool run
-  here unmodified and produce the same per-round tables (verified against the
-  original package's output — see `tests/`).
+- **A text language for stock-and-flow models** — derived from the
+  lethain/systems notation, with one structural change: every stock is
+  declared up front, before the flows that use it. Flow semantics are
+  identical to the original Python tool and produce the same per-round
+  tables (verified against the original package's output — see `tests/`).
 - **Language-server-like feedback while typing**: domain-aware diagnostics
   ("reference to undefined stock", "a leak can't drain an infinite stock",
   "initial values form a cycle"), completion of stock/auxiliary names and
@@ -23,18 +24,38 @@ report in [`research/systems-modeling-playground.md`](../../research/systems-mod
 
 ## The language
 
-Everything from lethain/systems (`docs/spec.md` semantics, including the
-discrete-rounds engine's quirks: reversed flow processing order, deferred
-destination additions, flooring in Conversion/Leak), plus:
+Stocks are declared first, one per line:
+
+```
+# Name(initial, max)? "description"? visible: true|false?
+Recruiters(3)  "The recruiting team"
+Departures     "On their way out" visible: false
+[Candidates]   "Infinite boundary stock (never shown)"
+```
+
+Descriptions surface in hover docs and autocomplete; `visible: false` keeps a
+stock out of the chart while leaving it in the table and CSV. Flows reference
+declared stocks only — using an undeclared stock (or declaring one inline in a
+flow, lethain/systems style) is an error with a quick fix that hoists the
+declaration to the top.
+
+After the declarations, everything from lethain/systems' `docs/spec.md`
+applies, including the discrete-rounds engine's quirks (reversed flow
+processing order, deferred destination additions, flooring in
+Conversion/Leak), plus:
 
 - **Auxiliaries**: `Name = expression`, recomputed every round.
-- **Real expressions**: standard operator precedence (the one deliberate
-  divergence — the original evaluates strictly left-to-right), parentheses,
-  `^`, comparisons, `AND OR NOT`, `IF…THEN…ELSE`.
+- **Real expressions**: standard operator precedence (a deliberate divergence
+  — the original evaluates strictly left-to-right), parentheses, `^`,
+  comparisons, `AND OR NOT`, `true`/`false`, `IF…THEN…ELSE`.
 - **An XMILE-flavored standard library**: `ABS INT ROUND MIN MAX MOD SQRT EXP
   LN LOG10 SIN COS TAN PI SAFEDIV`, `TIME DT STARTTIME ENDTIME`,
   `STEP PULSE RAMP`, and seeded `RANDOM NORMAL LOGNORMAL EXPRND POISSON`
   (one model-level seed; same source + same seed ⇒ identical table).
+
+Original lethain/systems files need their implicit stock declarations moved
+to the top to run here; the engine's output then matches the original exactly
+(that's what `tests/` asserts).
 
 ## Architecture
 
