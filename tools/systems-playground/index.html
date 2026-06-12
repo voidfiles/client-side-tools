@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Systems Modeling Playground - Client-Side Tools</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+    <!--
+      No build step: CodeMirror 6 is loaded as pinned ES modules from esm.sh.
+      The `*` prefix marks each package's dependencies as external so every
+      package resolves @codemirror/state etc. through this import map —
+      guaranteeing a single shared instance (duplicated state/view instances
+      are the classic way a CDN-loaded CodeMirror setup breaks).
+    -->
+    <script type="importmap">
+    {
+      "imports": {
+        "codemirror": "https://esm.sh/*codemirror@6.0.2",
+        "@codemirror/state": "https://esm.sh/*@codemirror/state@6.6.0",
+        "@codemirror/view": "https://esm.sh/*@codemirror/view@6.43.1",
+        "@codemirror/language": "https://esm.sh/*@codemirror/language@6.12.3",
+        "@codemirror/commands": "https://esm.sh/*@codemirror/commands@6.10.3",
+        "@codemirror/search": "https://esm.sh/*@codemirror/search@6.7.0",
+        "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.3",
+        "@codemirror/lint": "https://esm.sh/*@codemirror/lint@6.9.7",
+        "@lezer/common": "https://esm.sh/@lezer/common@1.5.2",
+        "@lezer/highlight": "https://esm.sh/*@lezer/highlight@1.2.3",
+        "@lezer/lr": "https://esm.sh/*@lezer/lr@1.4.10",
+        "@marijn/find-cluster-break": "https://esm.sh/@marijn/find-cluster-break@1.0.2",
+        "style-mod": "https://esm.sh/style-mod@4.1.3",
+        "w3c-keyname": "https://esm.sh/w3c-keyname@2.2.8",
+        "crelt": "https://esm.sh/crelt@1.0.6",
+        "uplot": "https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.esm.js"
+      }
+    }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header { margin-bottom: 1.5rem; }
+        h1 { color: #667eea; margin-bottom: 0.5rem; }
+        header p { color: #555; max-width: 70ch; }
+        header p code { background: #f1f3f5; padding: 0.1em 0.35em; border-radius: 4px; }
+
+        .back-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+        .back-link:hover { text-decoration: underline; }
+
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .controls label {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .controls select, .controls input {
+            padding: 0.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+        }
+        .controls input[type="number"] { width: 5.5rem; }
+        .controls button {
+            padding: 0.5rem 1rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        .controls button:hover { background: #5568d3; }
+        .controls button.secondary { background: #6c757d; }
+        .controls button.secondary:hover { background: #5a6268; }
+        .controls .spacer { flex: 1; }
+
+        .status {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            background: #f1f3f5;
+            color: #555;
+        }
+        .status.ok { background: #ebfbee; color: #2b8a3e; }
+        .status.warn { background: #fff9db; color: #997404; }
+        .status.error { background: #fff5f5; color: #c92a2a; }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+        @media (max-width: 960px) {
+            .workspace { grid-template-columns: 1fr; }
+            body { padding: 1rem; }
+            .container { padding: 1rem; }
+        }
+
+        #editor {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            min-height: 380px;
+            height: 540px;
+        }
+        #editor .cm-editor { height: 100%; }
+
+        .panel h2 {
+            font-size: 1rem;
+            color: #555;
+            margin-bottom: 0.5rem;
+        }
+        #chart { width: 100%; min-height: 100px; margin-bottom: 1.25rem; }
+        .u-legend { font-size: 12px; }
+
+        #table-wrap {
+            max-height: 320px;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        #table-wrap table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.85rem;
+            font-variant-numeric: tabular-nums;
+        }
+        #table-wrap th, #table-wrap td {
+            padding: 0.3rem 0.65rem;
+            text-align: right;
+            border-bottom: 1px solid #f1f3f5;
+            white-space: nowrap;
+        }
+        #table-wrap th {
+            position: sticky;
+            top: 0;
+            background: #f8f9fa;
+            color: #555;
+            z-index: 1;
+        }
+        #table-wrap tr td:first-child, #table-wrap tr th:first-child {
+            position: sticky;
+            left: 0;
+            background: #f8f9fa;
+            text-align: left;
+        }
+        .empty { color: #868e96; font-size: 0.9rem; padding: 0.75rem; }
+
+        .cm-systems-hover {
+            padding: 6px 8px;
+            max-width: 320px;
+            font-size: 13px;
+        }
+
+        details.reference { margin-top: 1.5rem; }
+        details.reference summary {
+            cursor: pointer;
+            color: #667eea;
+            font-weight: 600;
+        }
+        details.reference .ref-body {
+            margin-top: 0.75rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            font-size: 0.9rem;
+        }
+        details.reference h3 { font-size: 0.95rem; margin-bottom: 0.25rem; color: #555; }
+        details.reference pre {
+            background: #f8f9fa;
+            border: 1px solid #f1f3f5;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            overflow-x: auto;
+            font-size: 0.85rem;
+        }
+        details.reference ul { margin-left: 1.2rem; }
+        details.reference code { background: #f1f3f5; padding: 0.1em 0.3em; border-radius: 4px; }
+
+        noscript p { color: #c92a2a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../" class="back-link">← Back to Tools</a>
+
+        <header>
+            <h1>Systems Modeling Playground</h1>
+            <p>
+                A language-first system dynamics playground: write stock-and-flow models in a
+                superset of the <a href="https://github.com/lethain/systems">lethain/systems</a>
+                notation and get live diagnostics, charts, and a per-round table as you type.
+                Everything runs in your browser; share models with the Share button (the model is
+                compressed into the URL, no server involved).
+            </p>
+        </header>
+
+        <noscript><p>This tool needs JavaScript (and loads CodeMirror/uPlot from CDNs).</p></noscript>
+
+        <div class="controls">
+            <label>Example
+                <select id="examples">
+                    <option value="" disabled>— pick a model —</option>
+                </select>
+            </label>
+            <label>Rounds <input type="number" id="rounds" min="1" max="10000" value="10"></label>
+            <label>Seed <input type="number" id="seed" value="42" title="Random seed — same model + same seed = identical run"></label>
+            <span class="spacer"></span>
+            <button id="share">Share</button>
+            <button id="csv" class="secondary">Download CSV</button>
+        </div>
+
+        <div id="status" class="status">Loading editor…</div>
+
+        <div class="workspace">
+            <div id="editor"></div>
+            <div class="panel">
+                <h2>Stocks over time <small>(click legend entries to toggle series)</small></h2>
+                <div id="chart"></div>
+                <h2>Table of rounds</h2>
+                <div id="table-wrap"></div>
+            </div>
+        </div>
+
+        <details class="reference">
+            <summary>Language reference</summary>
+            <div class="ref-body">
+                <div>
+                    <h3>Stocks &amp; flows (lethain/systems compatible)</h3>
+                    <pre>Recruiters(3)        # stock, initial 3
+Pipeline(0, 50)      # initial 0, max 50
+[Candidates]         # infinite stock (hidden)
+
+# source &gt; destination @ rate
+[Candidates] &gt; Screens @ Recruiters * 3
+Screens &gt; Onsites @ 0.5        # decimal = Conversion
+Staff &gt; Departures @ Leak(0.1) # fraction leaks out
+a &gt; b @ Rate(2)                # explicit Rate</pre>
+                    <ul>
+                        <li><strong>Rate(n)</strong> — up to n units move per round.</li>
+                        <li><strong>Conversion(f)</strong> — drains the source; destination gains ⌊source·f⌋.</li>
+                        <li><strong>Leak(f)</strong> — moves ⌊source·f⌋, source keeps the rest.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Extensions</h3>
+                    <pre># auxiliaries: recomputed every round
+ChurnRate = IF Active &gt; 500 THEN 0.08 ELSE 0.04
+Active &gt; [Gone] @ Leak(ChurnRate)</pre>
+                    <ul>
+                        <li>Standard operator precedence, parentheses, <code>^</code>, comparisons, <code>AND OR NOT</code>, <code>IF…THEN…ELSE</code>.</li>
+                        <li>Trailing <code>#</code> comments.</li>
+                        <li>All randomness is seeded — identical seed ⇒ identical run.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Builtin functions (XMILE-flavored)</h3>
+                    <ul>
+                        <li>Math: <code>ABS INT ROUND MIN MAX MOD SQRT EXP LN LOG10 SIN COS TAN PI SAFEDIV</code></li>
+                        <li>Time: <code>TIME DT STARTTIME ENDTIME</code></li>
+                        <li>Test inputs: <code>STEP(h, start)</code>, <code>PULSE(mag, first, interval?)</code>, <code>RAMP(slope, start)</code></li>
+                        <li>Random: <code>RANDOM NORMAL LOGNORMAL EXPRND POISSON</code></li>
+                    </ul>
+                    <p>Hover any name in the editor for documentation; autocomplete knows your stocks.</p>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
