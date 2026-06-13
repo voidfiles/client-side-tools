@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation DSL - Client-Side Tools</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+    <!--
+      No build step. CodeMirror 6 and uPlot load as pinned ES modules from
+      esm.sh / jsDelivr; the `*` prefix marks each CodeMirror package's deps as
+      external so they share one @codemirror/state instance. The scottfr
+      `simulation` engine (the actual simulation runtime) is loaded from esm.sh.
+      Import maps don't reach module workers, so the engine runs on the main
+      thread — bounded by the model's own time length / step.
+    -->
+    <script type="importmap">
+    {
+      "imports": {
+        "codemirror": "https://esm.sh/*codemirror@6.0.2",
+        "@codemirror/state": "https://esm.sh/*@codemirror/state@6.6.0",
+        "@codemirror/view": "https://esm.sh/*@codemirror/view@6.43.1",
+        "@codemirror/language": "https://esm.sh/*@codemirror/language@6.12.3",
+        "@codemirror/commands": "https://esm.sh/*@codemirror/commands@6.10.3",
+        "@codemirror/search": "https://esm.sh/*@codemirror/search@6.7.0",
+        "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.3",
+        "@codemirror/lint": "https://esm.sh/*@codemirror/lint@6.9.7",
+        "@lezer/common": "https://esm.sh/@lezer/common@1.5.2",
+        "@lezer/highlight": "https://esm.sh/*@lezer/highlight@1.2.3",
+        "@lezer/lr": "https://esm.sh/*@lezer/lr@1.4.10",
+        "@marijn/find-cluster-break": "https://esm.sh/@marijn/find-cluster-break@1.0.2",
+        "style-mod": "https://esm.sh/style-mod@4.1.3",
+        "w3c-keyname": "https://esm.sh/w3c-keyname@2.2.8",
+        "crelt": "https://esm.sh/crelt@1.0.6",
+        "uplot": "https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.esm.js",
+        "simulation": "https://esm.sh/simulation@8.0.0"
+      }
+    }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header { margin-bottom: 1.5rem; }
+        h1 { color: #667eea; margin-bottom: 0.5rem; }
+        header p { color: #555; max-width: 76ch; }
+        header p code, header p a { background: #f1f3f5; padding: 0.1em 0.35em; border-radius: 4px; }
+        header a { color: #667eea; }
+
+        .back-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+        .back-link:hover { text-decoration: underline; }
+
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .controls label {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .controls select {
+            padding: 0.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+        }
+        .controls button {
+            padding: 0.5rem 1rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        .controls button:hover { background: #5568d3; }
+        .controls button.secondary { background: #6c757d; }
+        .controls button.secondary:hover { background: #5a6268; }
+        .controls .spacer { flex: 1; }
+
+        .status {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            background: #f1f3f5;
+            color: #555;
+        }
+        .status.ok { background: #ebfbee; color: #2b8a3e; }
+        .status.warn { background: #fff9db; color: #997404; }
+        .status.error { background: #fff5f5; color: #c92a2a; white-space: pre-wrap; }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+        @media (max-width: 960px) {
+            .workspace { grid-template-columns: 1fr; }
+            body { padding: 1rem; }
+            .container { padding: 1rem; }
+        }
+
+        #editor {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            min-height: 380px;
+            height: 600px;
+        }
+        #editor .cm-editor { height: 100%; }
+
+        .panel h2 {
+            font-size: 1rem;
+            color: #555;
+            margin-bottom: 0.5rem;
+        }
+        .panel h2 small { font-weight: normal; color: #868e96; }
+        #chart { width: 100%; min-height: 100px; margin-bottom: 1.25rem; }
+        .u-legend { font-size: 12px; }
+
+        #table-wrap {
+            max-height: 340px;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        #table-wrap table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.85rem;
+            font-variant-numeric: tabular-nums;
+        }
+        #table-wrap th, #table-wrap td {
+            padding: 0.3rem 0.65rem;
+            text-align: right;
+            border-bottom: 1px solid #f1f3f5;
+            white-space: nowrap;
+        }
+        #table-wrap th {
+            position: sticky;
+            top: 0;
+            background: #f8f9fa;
+            color: #555;
+            z-index: 1;
+        }
+        #table-wrap tr td:first-child, #table-wrap tr th:first-child {
+            position: sticky;
+            left: 0;
+            background: #f8f9fa;
+            text-align: left;
+        }
+        .empty { color: #868e96; font-size: 0.9rem; padding: 0.75rem; }
+
+        .cm-sim-hover {
+            padding: 6px 8px;
+            max-width: 340px;
+            font-size: 13px;
+        }
+        .cm-sim-hover strong { color: #5568d3; }
+
+        details.reference { margin-top: 1.5rem; }
+        details.reference summary {
+            cursor: pointer;
+            color: #667eea;
+            font-weight: 600;
+        }
+        details.reference .ref-body {
+            margin-top: 0.75rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            font-size: 0.9rem;
+        }
+        details.reference h3 { font-size: 0.95rem; margin-bottom: 0.25rem; color: #555; }
+        details.reference pre {
+            background: #f8f9fa;
+            border: 1px solid #f1f3f5;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            overflow-x: auto;
+            font-size: 0.82rem;
+        }
+        details.reference ul { margin-left: 1.2rem; }
+        details.reference code { background: #f1f3f5; padding: 0.1em 0.3em; border-radius: 4px; }
+
+        noscript p { color: #c92a2a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../" class="back-link">← Back to Tools</a>
+
+        <header>
+            <h1>Simulation DSL</h1>
+            <p>
+                A text language for the whole <a href="https://github.com/scottfr/simulation">scottfr/simulation</a>
+                toolkit — stocks, flows, variables, converters, and full agent-based modeling
+                (agents, states, transitions, populations, actions). What you write compiles
+                straight onto the simulation engine, which runs the model right here in your
+                browser. Pick an example, edit, and the chart and table update live. Equations use
+                the engine's own formula language (<code>[References]</code>, <code>{units}</code>,
+                <code>if … then … else end if</code>).
+            </p>
+        </header>
+
+        <noscript><p>This tool needs JavaScript (it loads CodeMirror, uPlot, and the simulation engine from CDNs).</p></noscript>
+
+        <div class="controls">
+            <label>Example
+                <select id="examples">
+                    <option value="" disabled>— pick a model —</option>
+                </select>
+            </label>
+            <span class="spacer"></span>
+            <button id="run">Run ▶</button>
+            <button id="share" class="secondary">Share</button>
+            <button id="csv" class="secondary">CSV</button>
+            <button id="json" class="secondary">ModelJSON</button>
+        </div>
+
+        <div id="status" class="status">Loading editor and simulation engine…</div>
+
+        <div class="workspace">
+            <div id="editor"></div>
+            <div class="panel">
+                <h2>Results over time <small>(click legend entries to toggle series)</small></h2>
+                <div id="chart"></div>
+                <h2>Table</h2>
+                <div id="table-wrap"></div>
+            </div>
+        </div>
+
+        <details class="reference">
+            <summary>Language reference</summary>
+            <div class="ref-body">
+                <div>
+                    <h3>Simulation settings &amp; stock-and-flow</h3>
+                    <pre>sim { start 0  length 50  step 0.5
+      units Years  algorithm RK4 }   # or Euler
+
+stock Prey { initial 400  nonNegative
+             units "Prey" }
+stock Belt { initial 0  type Conveyor  delay 5 }
+variable Rate = 0.25 { units "1 / Years" }
+
+# flow Name: source -&gt; target  (_ = outside)
+flow Births: _ -&gt; Prey {
+  rate "[Prey] * [Rate]"  nonNegative }
+flow Deaths: Prey -&gt; _ = "[Prey] * 0.1"</pre>
+                </div>
+                <div>
+                    <h3>Converters &amp; links</h3>
+                    <pre>converter Growth {
+  input Population       # or: input time
+  interpolation Linear   # or Discrete
+  points (0, 2) (5000, 1) (10000, 0)
+}
+
+# links are inferred from every [Reference]
+# in an equation; declare extra ones with:
+link Rate -&gt; Births</pre>
+                    <p>References resolve case-insensitively; quote names with spaces: <code>[Prey Birth Rate]</code>.</p>
+                </div>
+                <div>
+                    <h3>Agent-based modeling</h3>
+                    <pre>agent Person {
+  state Healthy  { startActive true }
+  state Infected { startActive false }
+  transition Catch: Healthy -&gt; Infected {
+    trigger Probability  value 0.05 }
+  transition Heal: Infected -&gt; Healthy {
+    trigger Timeout  value "{14 days}" }
+}
+population Pop { size 200  base Person }
+
+action Reset { trigger Timeout  value 30
+               do "[Healthy] <- true" }</pre>
+                    <p>Chart agent counts with a variable like <code>Count([Pop].FindState([Infected]))</code>.</p>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

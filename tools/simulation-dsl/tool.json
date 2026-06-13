@@ -1,0 +1,4 @@
+{
+  "name": "Simulation DSL",
+  "description": "Write system dynamics and agent-based models in a text DSL that compiles to and runs on the scottfr/simulation engine, with live charts and tables"
+}

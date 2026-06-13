@@ -1,0 +1,12 @@
+{
+  "name": "simulation-dsl",
+  "private": true,
+  "type": "module",
+  "description": "A DSL that compiles to the scottfr/simulation engine and covers its full modeling toolkit.",
+  "dependencies": {
+    "simulation": "8.0.0"
+  },
+  "scripts": {
+    "test": "node tests/run-tests.mjs"
+  }
+}
