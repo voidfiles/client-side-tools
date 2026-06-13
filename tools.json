@@ -15,6 +15,11 @@
     "description": "Format, validate, and beautify JSON data"
   },
   {
+    "id": "simulation-dsl",
+    "name": "Simulation DSL",
+    "description": "Write system dynamics and agent-based models in a text DSL that compiles to and runs on the scottfr/simulation engine, with live charts and tables"
+  },
+  {
     "id": "strip-svg-data-urls",
     "name": "Strip SVG Data URLs & CSS",
     "description": "Remove embedded data URLs (base64 images, fonts, etc.) and/or CSS from SVG markup to reduce file size"
