@@ -20,7 +20,7 @@ import { Model, toModelJSON } from 'simulation';
 
 import {
   analyze, hasErrors, NAME_RE, PROP_DOCS, DECL_KEYWORDS,
-  ALGORITHMS, TIME_UNITS, STOCK_TYPES, INTERPOLATIONS, TRIGGERS, PLACEMENTS, NETWORKS,
+  ALGORITHMS, TIME_UNITS, STOCK_TYPES, INTERPOLATIONS, TRIGGERS, PLACEMENTS, NETWORKS, PLOT_KINDS,
 } from './lang.js';
 import { compile } from './compiler.js';
 import { EXAMPLES } from './examples.js';
@@ -35,8 +35,8 @@ const TABLE_ROW_LIMIT = 500;
 const PROP_NAMES = new Set();
 for (const props of Object.values(PROP_DOCS)) for (const k of Object.keys(props)) PROP_NAMES.add(k.toLowerCase());
 const ENUM_WORDS = new Set(
-  [...ALGORITHMS, ...TIME_UNITS, ...STOCK_TYPES, ...INTERPOLATIONS, ...TRIGGERS]
-    .map((w) => w.toLowerCase()).concat(['true', 'false', 'time']),
+  [...ALGORITHMS, ...TIME_UNITS, ...STOCK_TYPES, ...INTERPOLATIONS, ...TRIGGERS, ...PLOT_KINDS]
+    .map((w) => w.toLowerCase()).concat(['true', 'false', 'time', 'all', 'none']),
 );
 const DECL_WORDS = new Set([...DECL_KEYWORDS].map((w) => w.toLowerCase()));
 
@@ -52,7 +52,8 @@ const simLanguage = StreamLanguage.define({
     if (stream.eatSpace()) return null;
     if (stream.match(/"(?:[^"\\]|\\.)*"?/) || stream.match(/'(?:[^'\\]|\\.)*'?/)) return 'string';
     if (stream.match(/->/)) return 'operator';
-    if (stream.match(/-?(?:\d+\.\d+|\d+\.?|\.\d+)(?:[eE][-+]?\d+)?/)) return 'number';
+    if (stream.match(/[$@]/)) return 'keyword';     // stock / variable sigils
+    if (stream.match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/)) return 'number';
     if (stream.match(/[\p{L}_][\p{L}\p{N}_]*/u)) {
       const word = stream.current().toLowerCase();
       if (DECL_WORDS.has(word)) return 'keyword';
@@ -60,7 +61,7 @@ const simLanguage = StreamLanguage.define({
       if (PROP_NAMES.has(word)) return 'propertyName';
       return 'variableName';
     }
-    if (stream.match(/[{}()]/)) return 'bracket';
+    if (stream.match(/[{}()[\]]/)) return 'bracket';
     if (stream.match(/[,;:=]/)) return 'punctuation';
     stream.next();
     return null;
@@ -90,7 +91,11 @@ function lintSource(view) {
   }));
 }
 
-/** Find the keyword of the innermost unclosed `{ … }` block before `pos`. */
+/**
+ * Find the declaration kind of the innermost unclosed `{ … }` block before
+ * `pos` — a keyword (`sim`, `converter`, …) or a sigil/arrow form mapped to its
+ * property-doc key (`@` → stock, `$` → variable, `->` → flow).
+ */
 function enclosingDecl(text, pos) {
   let depth = 0;
   for (let i = pos - 1; i >= 0; i--) {
@@ -98,9 +103,12 @@ function enclosingDecl(text, pos) {
     if (ch === '}') depth++;
     else if (ch === '{') {
       if (depth === 0) {
-        // The keyword is the first word on (or before) this line.
+        // Identify the declaration from the header on (or before) this line.
         const lineStart = text.lastIndexOf('\n', i) + 1;
         const head = text.slice(lineStart, i).trim();
+        if (head.startsWith('@')) return 'stock';
+        if (head.startsWith('$')) return 'variable';
+        if (head.includes('->')) return 'flow';
         const m = /^([\p{L}_][\p{L}\p{N}_]*)/u.exec(head);
         return m ? m[1].toLowerCase() : null;
       }
@@ -117,13 +125,13 @@ function completionSource(context) {
   const decl = enclosingDecl(text, word ? word.from : context.pos);
   const options = [];
 
-  if (decl && PROP_DOCS[decl === 'var' ? 'variable' : decl]) {
-    const props = PROP_DOCS[decl === 'var' ? 'variable' : decl];
+  if (decl && PROP_DOCS[decl]) {
+    const props = PROP_DOCS[decl];
     for (const [name, doc] of Object.entries(props)) {
       options.push({ label: name, type: 'property', info: doc });
     }
     // Enum value completions for the relevant property keys.
-    const enums = { algorithm: ALGORITHMS, units: TIME_UNITS, type: STOCK_TYPES, interpolation: INTERPOLATIONS, trigger: TRIGGERS, placement: PLACEMENTS, network: NETWORKS };
+    const enums = { algorithm: ALGORITHMS, units: TIME_UNITS, type: STOCK_TYPES, interpolation: INTERPOLATIONS, trigger: TRIGGERS, placement: PLACEMENTS, network: NETWORKS, plot: PLOT_KINDS };
     for (const list of Object.values(enums)) for (const v of list) options.push({ label: v, type: 'enum' });
   } else {
     for (const kw of DECL_KEYWORDS) options.push({ label: kw, type: 'keyword' });
@@ -148,7 +156,7 @@ const hoverDocs = hoverTooltip((view, pos) => {
   if (!NAME_RE.test(word)) return null;
 
   const decl = enclosingDecl(view.state.doc.toString(), start);
-  const propDoc = decl && PROP_DOCS[decl === 'var' ? 'variable' : decl] && PROP_DOCS[decl === 'var' ? 'variable' : decl][word];
+  const propDoc = decl && PROP_DOCS[decl] && PROP_DOCS[decl][word];
   // Match a symbol case-insensitively.
   let sym = null;
   for (const s of lastAnalysis.symbols.values()) if (s.name.toLowerCase() === word.toLowerCase()) { sym = s; break; }

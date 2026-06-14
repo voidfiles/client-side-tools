@@ -265,26 +265,28 @@
             <summary>Language reference</summary>
             <div class="ref-body">
                 <div>
-                    <h3>Simulation settings &amp; stock-and-flow</h3>
-                    <pre>sim { start 0  length 50  step 0.5
-      units Years  algorithm RK4 }   # or Euler
+                    <h3>Settings &amp; stock-and-flow</h3>
+                    <pre>sim { start: 0, length: 50, step: 0.5,
+      units: 'Years', algorithm: RK4,  # or Euler
+      plot: [stock] }    # default: stocks only
 
-stock Prey { initial 400  nonNegative
-             units "Prey" }
-stock Belt { initial 0  type Conveyor  delay 5 }
-variable Rate = 0.25 { units "1 / Years" }
+@Prey { initial: 400, nonNegative: true,
+        units: "Prey" }
+@Belt { initial: 0, type: Conveyor, delay: 5 }
+@Empty                  # no body → initial 0
+$Rate = 0.25 { units: "1 / Years" }
 
-# flow Name: source -&gt; target  (_ = outside)
-flow Births: _ -&gt; Prey {
-  rate "[Prey] * [Rate]"  nonNegative }
-flow Deaths: Prey -&gt; _ = "[Prey] * 0.1"</pre>
+# A flow is just Source -&gt; Target (_ = outside),
+# auto-named SourceToTarget; Name: overrides.
+_ -&gt; Prey { rate: "[Prey] * [Rate]", nonNegative: true }
+Deaths: Prey -&gt; _ = "[Prey] * 0.1"</pre>
                 </div>
                 <div>
                     <h3>Converters &amp; links</h3>
                     <pre>converter Growth {
-  input Population       # or: input time
-  interpolation Linear   # or Discrete
-  points (0, 2) (5000, 1) (10000, 0)
+  input: Population,      # or: input: time
+  interpolation: Linear,  # or Discrete
+  points: (0, 2) (5000, 1) (10000, 0)
 }
 
 # links are inferred from every [Reference]
@@ -295,18 +297,18 @@ link Rate -&gt; Births</pre>
                 <div>
                     <h3>Agent-based modeling</h3>
                     <pre>agent Person {
-  state Healthy  { startActive true }
-  state Infected { startActive false }
+  state Healthy  { startActive: true }
+  state Infected { startActive: false }
   transition Catch: Healthy -&gt; Infected {
-    trigger Probability  value 0.05 }
+    trigger: Probability, value: 0.05 }
   transition Heal: Infected -&gt; Healthy {
-    trigger Timeout  value "{14 days}" }
+    trigger: Timeout, value: "{14 days}" }
 }
-population Pop { size 200  base Person }
+population Pop { size: 200, base: Person }
 
-action Reset { trigger Timeout  value 30
-               do "[Healthy] <- true" }</pre>
-                    <p>Chart agent counts with a variable like <code>Count([Pop].FindState([Infected]))</code>.</p>
+action Reset { trigger: Timeout, value: 30,
+               do: "[Healthy] <- true" }</pre>
+                    <p>Chart agent counts with <code>$"Num Infected" { value: "Count([Pop].FindState([Infected]))" }</code> and <code>plot: [variable]</code>.</p>
                 </div>
             </div>
         </details>

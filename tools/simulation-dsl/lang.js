@@ -8,24 +8,27 @@
  * That is the deliberate what/how split: this module owns the shape of the
  * model; the engine owns the math.
  *
- * It covers the whole simulation toolkit:
+ * The notation is terse and sigil-led: `@` marks a stock, `$` marks a variable,
+ * and a bare `Source -> Target` arrow is a flow. Block bodies are `key: value`
+ * pairs separated by commas, strings are quoted, and numbers are bare (a leading
+ * digit is required, so write `0.5`, not `.5`).
  *
- *   sim { start 2000  length 50  step 0.5  units Years  algorithm RK4 }
+ *   sim { start: 0, length: 50, step: 0.5, units: 'Years', algorithm: RK4 }
  *
- *   stock Prey { initial 400  nonNegative  units "Prey" }
- *   stock Conveyor { initial 0  type Conveyor  delay 5 }
- *   variable Rate = 0.25 { units "1 / Years" }
- *   flow Births: _ -> Prey { rate "[Prey] * [Rate]"  nonNegative }
- *   converter Growth { input Population  interpolation Linear  points (0,2) (10000,0) }
+ *   @Prey { initial: 400, nonNegative: true, units: "Prey" }
+ *   @Belt { initial: 0, type: Conveyor, delay: 5 }
+ *   $Rate = 0.25 { units: "1 / Years" }
+ *   Births: _ -> Prey { rate: "[Prey] * [Rate]", nonNegative: true }
+ *   converter Growth { input: Population, interpolation: Linear, points: (0,2) (10000,0) }
  *   link Rate -> Births
  *
  *   agent Person {
- *     state Healthy  { startActive true }
- *     state Infected { startActive false }
- *     transition Healthy -> Infected { trigger Probability  value 0.05 }
+ *     state Healthy  { startActive: true }
+ *     state Infected { startActive: false }
+ *     transition Healthy -> Infected { trigger: Probability, value: 0.05 }
  *   }
- *   population Pop { size 100  base Person }
- *   action Reset { trigger Timeout  value 10  do "[Healthy] <- true" }
+ *   population Pop { size: 100, base: Person }
+ *   action Reset { trigger: Timeout, value: 10, do: "[Healthy] <- true" }
  *
  * The module is dependency-free and runs both in the browser (editor
  * diagnostics, completion, hover) and under Node (the compiler + tests).
@@ -33,11 +36,20 @@
 
 export const NAME_RE = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 
-// Top-level / block statement keywords.
+// Top-level / block statement keywords. Stocks (`@`), variables (`$`), and flows
+// (`Source -> Target`) have their own terse syntax and are not keyword-led.
 export const DECL_KEYWORDS = new Set([
   'sim', 'name', 'description',
-  'stock', 'variable', 'var', 'flow', 'converter',
-  'state', 'transition', 'action', 'agent', 'population', 'link',
+  'converter', 'state', 'transition', 'action', 'agent', 'population', 'link',
+]);
+
+// Old keyword forms, replaced by sigils/arrows — kept only to give a helpful
+// "use X instead" diagnostic when someone writes the previous syntax.
+export const REMOVED_KEYWORDS = new Map([
+  ['stock', 'declare a stock with `@Name { … }`'],
+  ['flow', 'declare a flow with `Source -> Target { … }`'],
+  ['variable', 'declare a variable with `$Name = value`'],
+  ['var', 'declare a variable with `$Name = value`'],
 ]);
 
 export const ALGORITHMS = ['Euler', 'RK4'];
@@ -47,6 +59,9 @@ export const INTERPOLATIONS = ['Linear', 'Discrete'];
 export const TRIGGERS = ['Timeout', 'Probability', 'Condition'];
 export const PLACEMENTS = ['Random', 'Network', 'Grid', 'Ellipse', 'Custom Function'];
 export const NETWORKS = ['None', 'Custom Function'];
+// Primitive kinds the UI can chart / tabulate, and the default (`sim { plot: … }`).
+export const PLOT_KINDS = ['stock', 'variable', 'flow', 'converter', 'state'];
+export const DEFAULT_PLOT_KINDS = ['stock'];
 
 // Property documentation used by the editor's hover + completion. Keyed by the
 // declaration keyword, then the property name.
@@ -58,9 +73,10 @@ export const PROP_DOCS = {
     units: `Time unit label: ${TIME_UNITS.join(', ')}.`,
     algorithm: 'Integration method: Euler or RK4 (default RK4).',
     pause: 'Optional pause interval for interactive runs.',
+    plot: `Which primitive kinds to chart and tabulate, e.g. plot: [stock, flow]. Default [stock]. Kinds: ${PLOT_KINDS.join(', ')} (or all / none).`,
   },
   stock: {
-    initial: 'Initial value (number or equation). Also settable as `stock X = <value>`.',
+    initial: 'Initial value (number or equation). Also settable as `@X = <value>`.',
     nonNegative: 'Flag — clamp the stock so it never drops below zero.',
     type: 'Store (default) or Conveyor (a delay/conveyor stock).',
     delay: 'Conveyor delay (only meaningful for type Conveyor).',
@@ -70,12 +86,12 @@ export const PROP_DOCS = {
     note: 'Free-text documentation.',
   },
   variable: {
-    value: 'A constant, equation, or vector. Also settable as `variable X = <value>`.',
+    value: 'A constant, equation, or vector. Also settable as `$X = <value>`.',
     units: 'Unit string.',
     min: 'Lower constraint.', max: 'Upper constraint.', note: 'Documentation.',
   },
   flow: {
-    rate: 'Flow rate equation. Also settable as `flow F: A -> B = <rate>`.',
+    rate: 'Flow rate equation. Also settable as `A -> B = <rate>`.',
     nonNegative: 'Flag — the flow can only run in its declared direction.',
     units: 'Unit string, e.g. "People / Year".', note: 'Documentation.',
   },
@@ -118,8 +134,8 @@ export const PROP_DOCS = {
   agent: { note: 'Documentation.' },
 };
 
-// Which property keys are boolean flags (no value).
-const FLAG_PROPS = new Set(['nonNegative', 'repeat', 'recalculate', 'geoWrap']);
+// Which property keys are boolean flags (no value). Matched case-insensitively.
+const FLAG_PROPS = new Set(['nonnegative', 'repeat', 'recalculate', 'geowrap']);
 
 // ---------------------------------------------------------------------------
 // Tokenizer
@@ -127,9 +143,11 @@ const FLAG_PROPS = new Set(['nonNegative', 'repeat', 'recalculate', 'geoWrap']);
 
 const TOKEN_PATTERNS = [
   ['arrow', /^->/],
-  ['number', /^-?(?:\d+\.\d+|\d+\.?|\.\d+)(?:[eE][-+]?\d+)?/],
+  ['sigil', /^[$@]/],
+  // Numbers are bare and need a leading digit: `0.5` and `10`, never `.5`.
+  ['number', /^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/],
   ['name', /^[\p{L}_][\p{L}\p{N}_]*/u],
-  ['punct', /^[{}(),;:=]/],
+  ['punct', /^[{}()[\],;:=]/],
 ];
 
 /** Tokenize a whole document into {type, text, value?, from, to, line}. */
@@ -227,6 +245,24 @@ class Parser {
     }
     return true;
   }
+  /**
+   * Does the statement starting here have a top-level `->` before its body?
+   * That makes it a flow (`A -> B { … }`), regardless of any `@`/`$`/`Name:`
+   * lead-in. Scans the current line only and stops at `{` (a body) — `->` inside
+   * a quoted equation is part of the string token, so it never trips this.
+   */
+  lineHasArrow() {
+    let p = this.pos;
+    while (p < this.tokens.length && this.tokens[p].type === 'newline') p++;
+    while (p < this.tokens.length) {
+      const t = this.tokens[p];
+      if (t.type === 'arrow') return true;
+      if (t.type === 'newline' || t.type === 'eof') return false;
+      if (t.type === 'punct' && t.text === '{') return false;
+      p++;
+    }
+    return false;
+  }
   eof() { return this.peek().type === 'eof'; }
   expect(text, what) {
     const t = this.peek();
@@ -239,9 +275,10 @@ class Parser {
 
 function isPunct(tok, text) { return tok && tok.type === 'punct' && tok.text === text; }
 
-/** Parse a single value token into a typed value node. */
+/** Parse a single value into a typed value node (number, string, bool, ident, list). */
 function parseValueNode(p) {
   const t = p.peek();
+  if (isPunct(t, '[')) return parseList(p);
   if (t.type === 'number') { p.next(); return { type: 'number', value: t.value, tok: t }; }
   if (t.type === 'string') { p.next(); return { type: 'string', value: t.value, tok: t }; }
   if (t.type === 'name') {
@@ -250,12 +287,27 @@ function parseValueNode(p) {
     p.next();
     return { type: 'ident', value: t.text, tok: t };
   }
-  throw new ParseError('Expected a value (number, "string", true/false, or a name)', t.from, t.to);
+  throw new ParseError('Expected a value (number, "string", true/false, a name, or a [list])', t.from, t.to);
 }
 
-/** Endpoint for flow/transition/link: a name, or `_`/`*`/nothing for null. */
+/** A `[a, b, c]` list of values (used by `sim { plot: [...] }`). */
+function parseList(p) {
+  const open = p.expect('[', "Expected '[' to start a list");
+  const items = [];
+  for (;;) {
+    const t = p.peek();
+    if (t.type === 'eof') throw new ParseError("Unterminated list — missing ']'", open.from, open.to);
+    if (isPunct(t, ']')) { const close = p.next(); return { type: 'list', items, tok: open, from: open.from, to: close.to }; }
+    if (isPunct(t, ',')) { p.next(); continue; }
+    items.push(parseValueNode(p));
+    if (isPunct(p.peek(), ',')) p.next();
+  }
+}
+
+/** Endpoint for flow/transition/link: a name (optionally `@`-prefixed), or `_` for null. */
 function parseEndpoint(p) {
-  const t = p.peek();
+  let t = p.peek();
+  if (t.type === 'sigil' && t.text === '@') { p.next(); t = p.peek(); }
   if (t.type === 'name') {
     if (t.text === '_') { p.next(); return { type: 'null', tok: t }; }
     p.next();
@@ -274,9 +326,10 @@ function parseDeclName(p) {
 }
 
 /**
- * Parse a `{ ... }` body of `key value` / flag properties into a map.
+ * Parse a `{ ... }` body of `key: value` / flag properties into a map.
  * Returns { props: Map<key, {key, keyTok, value|points|flag}>, from, to }.
- * `points` keys collect (x,y) pairs.
+ * Properties are separated by commas (newlines and `;` also work). `points`
+ * keys collect (x, y) pairs.
  */
 function parseBody(p) {
   const open = p.expect('{', "Expected '{' to start the body");
@@ -285,17 +338,18 @@ function parseBody(p) {
     const t = p.peek();
     if (t.type === 'eof') throw new ParseError("Unterminated body — missing '}'", open.from, open.to);
     if (isPunct(t, '}')) { const close = p.next(); return { props, from: open.from, to: close.to }; }
-    if (isPunct(t, ';')) { p.next(); continue; }
+    if (isPunct(t, ',') || isPunct(t, ';')) { p.next(); continue; }
     if (t.type !== 'name') throw new ParseError(`Expected a property name, got '${t.text}'`, t.from, t.to);
     const keyTok = p.next();
     const key = keyTok.text;
+    const lower = key.toLowerCase();
     const prop = { key, keyTok };
-    // Optional '=' or ':' separators are allowed for readability.
-    if (isPunct(p.peek(), '=') || isPunct(p.peek(), ':')) p.next();
+    // Label/value separator: ':' (canonical) or '=' are both accepted.
+    if (isPunct(p.peek(), ':') || isPunct(p.peek(), '=')) p.next();
 
-    if (key === 'points' || key === 'data') {
+    if (lower === 'points' || lower === 'data') {
       prop.points = parsePoints(p);
-    } else if (FLAG_PROPS.has(key)) {
+    } else if (FLAG_PROPS.has(lower)) {
       // Flag — may optionally be followed by true/false.
       const nx = p.peek();
       if (nx.type === 'name' && (nx.text.toLowerCase() === 'true' || nx.text.toLowerCase() === 'false')) {
@@ -307,14 +361,17 @@ function parseBody(p) {
       prop.value = parseValueNode(p);
     }
     props.push(prop);
-    // Properties are separated by newlines or ';'. Consume a trailing ';'.
-    if (isPunct(p.peek(), ';')) p.next();
+    // Consume a trailing property separator.
+    if (isPunct(p.peek(), ',') || isPunct(p.peek(), ';')) p.next();
   }
 }
 
 function parsePoints(p) {
   const points = [];
-  while (isPunct(p.peek(), '(')) {
+  for (;;) {
+    // Points may optionally be comma-separated: (0,0), (1,5).
+    if (points.length && isPunct(p.peek(), ',')) p.next();
+    if (!isPunct(p.peek(), '(')) break;
     const open = p.next();
     const x = parseValueNode(p);
     p.expect(',', "Expected ',' between x and y in a point");
@@ -341,32 +398,34 @@ function parseShorthandAndBody(p) {
   return { shorthand, body };
 }
 
-function parseConnectorHeader(p, keyword) {
-  // `keyword [Name :] Source -> Target`
-  // If we see `<name> :` the first name is the connector's name.
+function parseConnectorHeader(p) {
+  // `[Name :] Source -> Target` — a leading `<name> :` names the connector.
   let name = null;
   let nameTok = null;
   const first = p.peek();
   const second = p.peek(1);
-  if ((first.type === 'name' || first.type === 'string') && isPunct(second, ':')) {
+  if (((first.type === 'name' && first.text !== '_') || first.type === 'string') && isPunct(second, ':')) {
     const dn = parseDeclName(p);
     name = dn.name; nameTok = dn.tok;
     p.expect(':', "Expected ':' after the connector name");
   }
   const source = parseEndpoint(p);
-  p.expect('->', "Expected '->' between source and target");
+  const arrow = p.expect('->', "Expected '->' between source and target");
   const target = parseEndpoint(p);
-  return { name, nameTok, source, target };
+  return { name, nameTok, source, target, kwTok: nameTok || source.tok || arrow };
 }
 
+/** A flow: `[Name:] Source -> Target { … }`. No keyword — the `->` makes it a flow. */
+function parseArrowFlow(p) {
+  const header = parseConnectorHeader(p);
+  const { shorthand, body } = parseShorthandAndBody(p);
+  return { kind: 'flow', ...header, shorthand, body };
+}
+
+/** A keyword declaration: sim, name, description, link, transition, converter, state, action, population. */
 function parseDeclaration(p, insideAgent) {
-  const kwTok = p.peek();
-  const kw = kwTok.text;
-  if (kwTok.type !== 'name' || !DECL_KEYWORDS.has(kw.toLowerCase())) {
-    throw new ParseError(`Unexpected '${kwTok.text}' — expected a declaration (stock, variable, flow, …)`, kwTok.from, kwTok.to);
-  }
-  p.next();
-  const lower = kw.toLowerCase();
+  const kwTok = p.next();
+  const lower = kwTok.text.toLowerCase();
 
   if (lower === 'sim') {
     if (insideAgent) throw new ParseError('`sim` settings must be at the top level', kwTok.from, kwTok.to);
@@ -374,6 +433,8 @@ function parseDeclaration(p, insideAgent) {
     return { kind: 'sim', body, kwTok };
   }
   if (lower === 'name' || lower === 'description') {
+    if (insideAgent) throw new ParseError(`\`${lower}\` must be at the top level`, kwTok.from, kwTok.to);
+    if (isPunct(p.peek(), ':') || isPunct(p.peek(), '=')) p.next();
     const v = parseValueNode(p);
     return { kind: lower, value: v, kwTok };
   }
@@ -383,30 +444,68 @@ function parseDeclaration(p, insideAgent) {
     const target = parseEndpoint(p);
     return { kind: 'link', source, target, kwTok };
   }
-  if (lower === 'flow' || lower === 'transition') {
-    const header = parseConnectorHeader(p, lower);
+  if (lower === 'transition') {
+    const header = parseConnectorHeader(p);
     const { shorthand, body } = parseShorthandAndBody(p);
-    return { kind: lower, ...header, shorthand, body, kwTok };
+    return { kind: 'transition', ...header, shorthand, body, kwTok };
   }
 
-  // Named, valued declarations: stock, variable/var, converter, state, action,
-  // agent, population.
+  // Named, valued declarations: converter, state, action, population.
   const dn = parseDeclName(p);
   if (!dn) {
     const t = p.peek();
-    throw new ParseError(`Expected a name after '${kw}'`, t.from, t.to);
-  }
-  if (lower === 'agent') {
-    throw new ParseError('Nested agents are not supported — declare agents at the top level', kwTok.from, kwTok.to);
+    throw new ParseError(`Expected a name after '${kwTok.text}'`, t.from, t.to);
   }
   const { shorthand, body } = parseShorthandAndBody(p);
-  const kindName = lower === 'var' ? 'variable' : lower;
-  return { kind: kindName, name: dn.name, nameTok: dn.tok, shorthand, body, kwTok };
+  return { kind: lower, name: dn.name, nameTok: dn.tok, shorthand, body, kwTok };
 }
 
 /**
- * Agents contain *declarations*, not key/value properties, so they need a
- * dedicated body parser.
+ * Parse one statement: a flow (`A -> B`), a sigil declaration (`@Stock`,
+ * `$Variable`), or a keyword declaration. Used at the top level and inside
+ * agent bodies (which may own their own stocks, variables, and flows).
+ */
+function parseStatement(p, insideAgent) {
+  const t = p.peek();
+
+  // Keyword-led declarations (incl. `transition`/`link`, which also use `->`)
+  // are matched before arrow-flows so their headers parse correctly.
+  if (t.type === 'name') {
+    const lower = t.text.toLowerCase();
+    if (REMOVED_KEYWORDS.has(lower)) {
+      throw new ParseError(`\`${t.text}\` is no longer a keyword — ${REMOVED_KEYWORDS.get(lower)}.`, t.from, t.to);
+    }
+    if (lower === 'agent') {
+      if (insideAgent) throw new ParseError('Nested agents are not supported — declare agents at the top level', t.from, t.to);
+      p.next();
+      const dn = parseDeclName(p);
+      if (!dn) throw new ParseError("Expected a name after 'agent'", p.peek().from, p.peek().to);
+      const ab = parseAgentBody(p);
+      return { kind: 'agent', name: dn.name, nameTok: dn.tok, agentBody: ab.decls, note: ab.note, kwTok: t };
+    }
+    if (DECL_KEYWORDS.has(lower)) return parseDeclaration(p, insideAgent);
+  }
+
+  // A top-level `->` makes the statement a flow (the source may be `_`, a bare
+  // name, or an `@`-prefixed stock).
+  if (p.lineHasArrow()) return parseArrowFlow(p);
+
+  // Sigil declarations: `@Stock { … }` / `@Stock = v`, `$Variable = v`.
+  if (t.type === 'sigil') {
+    const sig = p.next();
+    const dn = parseDeclName(p);
+    if (!dn) throw new ParseError(`Expected a name after '${sig.text}'`, p.peek().from, p.peek().to);
+    const { shorthand, body } = parseShorthandAndBody(p);
+    return { kind: sig.text === '$' ? 'variable' : 'stock', name: dn.name, nameTok: dn.tok, shorthand, body, kwTok: sig };
+  }
+
+  // Fall through: try to parse a flow so the error points at the missing `->`.
+  return parseArrowFlow(p);
+}
+
+/**
+ * Agents own declarations (stocks, variables, flows, states, transitions),
+ * not key/value properties, plus an optional `note`.
  */
 function parseAgentBody(p) {
   const open = p.expect('{', "Expected '{' to start the agent body");
@@ -416,13 +515,14 @@ function parseAgentBody(p) {
     const t = p.peek();
     if (t.type === 'eof') throw new ParseError("Unterminated agent — missing '}'", open.from, open.to);
     if (isPunct(t, '}')) { const close = p.next(); return { decls, note, from: open.from, to: close.to }; }
-    if (isPunct(t, ';')) { p.next(); continue; }
+    if (isPunct(t, ';') || isPunct(t, ',')) { p.next(); continue; }
     if (t.type === 'name' && t.text.toLowerCase() === 'note') {
       p.next();
+      if (isPunct(p.peek(), ':') || isPunct(p.peek(), '=')) p.next();
       note = parseValueNode(p);
       continue;
     }
-    decls.push(parseDeclaration(p, true));
+    decls.push(parseStatement(p, true));
   }
 }
 
@@ -431,18 +531,8 @@ export function parseProgram(text) {
   const p = new Parser(tokens);
   const decls = [];
   while (!p.eof()) {
-    const kwTok = p.peek();
     try {
-      if (kwTok.type === 'name' && kwTok.text.toLowerCase() === 'agent') {
-        // Special agent handling: header then declaration-body.
-        p.next();
-        const dn = parseDeclName(p);
-        if (!dn) throw new ParseError("Expected a name after 'agent'", p.peek().from, p.peek().to);
-        const ab = parseAgentBody(p);
-        decls.push({ kind: 'agent', name: dn.name, nameTok: dn.tok, agentBody: ab.decls, note: ab.note, kwTok });
-      } else {
-        decls.push(parseDeclaration(p, false));
-      }
+      decls.push(parseStatement(p, false));
     } catch (e) {
       if (e instanceof ParseError) {
         diagnostics.push({ from: e.from, to: Math.max(e.to, e.from + 1), severity: 'error', message: e.message });
@@ -494,7 +584,7 @@ export function analyze(text) {
   const err = (from, to, message) => diagnostics.push({ from, to: Math.max(to, from + 1), severity: 'error', message });
   const warn = (from, to, message) => diagnostics.push({ from, to: Math.max(to, from + 1), severity: 'warning', message });
 
-  const config = { timeStart: 0, timeLength: 100, timeStep: 1, algorithm: 'RK4', timeUnits: 'Years' };
+  const config = { timeStart: 0, timeLength: 100, timeStep: 1, algorithm: 'RK4', timeUnits: 'Years', plot: DEFAULT_PLOT_KINDS.slice() };
   let name = null;
   let description = null;
 
@@ -528,13 +618,28 @@ export function analyze(text) {
   };
   const valEquation = (prop) => {
     // number -> number; string -> equation string; ident/boolean -> coerced.
+    // Lists are only meaningful for `sim { plot: … }`, handled separately.
     if (!prop || !prop.value) return undefined;
     const v = prop.value;
-    if (v.type === 'number') return v.value;
-    if (v.type === 'string') return v.value;
-    if (v.type === 'boolean') return v.value;
-    if (v.type === 'ident') return v.value;
+    if (v.type === 'number' || v.type === 'string' || v.type === 'boolean' || v.type === 'ident') return v.value;
     return undefined;
+  };
+  // Read `sim { plot: … }` — a kind, a [list] of kinds, or all / none — into an
+  // array of plottable kinds; reports unknown kinds.
+  const readPlotKinds = (prop) => {
+    const kinds = [];
+    const addNode = (node) => {
+      if (!node) return;
+      if (node.type === 'list') { node.items.forEach(addNode); return; }
+      const raw = String(node.value).toLowerCase();
+      if (raw === 'all') { kinds.push(...PLOT_KINDS); return; }
+      if (raw === 'none') return;
+      const match = PLOT_KINDS.find((k) => k === raw || `${k}s` === raw);
+      if (!match) err(node.tok.from, node.tok.to, `Unknown plot kind '${node.value}' — use one of: ${PLOT_KINDS.join(', ')} (or all / none)`);
+      else kinds.push(match);
+    };
+    addNode(prop.value);
+    return [...new Set(kinds)];
   };
   const requireEnum = (prop, allowed, label) => {
     if (!prop) return undefined;
@@ -673,10 +778,7 @@ export function analyze(text) {
 
   function coerceValue(v) {
     if (!v) return undefined;
-    if (v.type === 'number') return v.value;
-    if (v.type === 'string') return v.value;
-    if (v.type === 'boolean') return v.value;
-    if (v.type === 'ident') return v.value;
+    if (v.type === 'number' || v.type === 'string' || v.type === 'boolean' || v.type === 'ident') return v.value;
     return undefined;
   }
   function numProp(prop) {
@@ -692,12 +794,13 @@ export function analyze(text) {
 
   const processConnector = (d, scope) => {
     const map = propMap(d.body);
+    const declTok = d.nameTok || d.kwTok;
     if (d.kind === 'flow') {
       const known = new Set(['rate', 'nonnegative', 'units', 'note']);
       consumeKnown(map, known, 'flow');
       const rate = d.shorthand ? coerceValue(d.shorthand) : valEquation(map.get('rate'));
       const rec = {
-        name: d.name || autoName('Flow', model.flows.length), nameTok: d.nameTok,
+        name: d.name || connectorAutoName(d), nameTok: d.nameTok, declTok,
         source: d.source, target: d.target, scope,
         rate,
         nonNegative: map.has('nonnegative') ? map.get('nonnegative').flag : undefined,
@@ -712,7 +815,7 @@ export function analyze(text) {
       consumeKnown(map, known, 'transition');
       const value = d.shorthand ? coerceValue(d.shorthand) : valEquation(map.get('value'));
       const rec = {
-        name: d.name || autoName('Transition', model.transitions.length), nameTok: d.nameTok,
+        name: d.name || connectorAutoName(d), nameTok: d.nameTok, declTok,
         source: d.source, target: d.target, scope,
         trigger: requireEnum(map.get('trigger'), TRIGGERS, 'Trigger') || 'Timeout',
         value,
@@ -726,18 +829,24 @@ export function analyze(text) {
     }
   };
 
-  function autoName(prefix, n) { return `${prefix} ${n + 1}`; }
+  // Auto-name an unnamed connector as `{Source}To{Target}`; `_` endpoints become
+  // "External". Authors override it with a `Name:` prefix.
+  function connectorAutoName(d) {
+    const part = (ep) => (ep && ep.type === 'ref' ? ep.name : 'External');
+    return `${part(d.source)}To${part(d.target)}`;
+  }
 
   for (const d of decls) {
     if (d.kind === 'sim') {
       const map = propMap(d.body);
-      consumeKnown(map, new Set(['start', 'length', 'step', 'units', 'algorithm', 'pause']), 'sim');
+      consumeKnown(map, new Set(['start', 'length', 'step', 'units', 'algorithm', 'pause', 'plot']), 'sim');
       if (map.has('start')) config.timeStart = numProp(map.get('start')) ?? config.timeStart;
       if (map.has('length')) config.timeLength = numProp(map.get('length')) ?? config.timeLength;
       if (map.has('step')) config.timeStep = numProp(map.get('step')) ?? config.timeStep;
       if (map.has('pause')) config.timePause = numProp(map.get('pause'));
       if (map.has('units')) config.timeUnits = requireEnum(map.get('units'), TIME_UNITS, 'Time units') || config.timeUnits;
       if (map.has('algorithm')) config.algorithm = requireEnum(map.get('algorithm'), ALGORITHMS, 'Algorithm') || config.algorithm;
+      if (map.has('plot')) config.plot = readPlotKinds(map.get('plot'));
     } else if (d.kind === 'name') {
       name = coerceValue(d.value);
     } else if (d.kind === 'description') {
@@ -787,10 +896,11 @@ export function analyze(text) {
   for (const f of model.flows) {
     checkEndpoint(f.source, f.scope, 'stock', 'Flow source');
     checkEndpoint(f.target, f.scope, 'stock', 'Flow target');
+    const pos = f.declTok || f.nameTok;
     if (f.source.type === 'null' && f.target.type === 'null') {
-      warn(f.nameTok ? f.nameTok.from : 0, f.nameTok ? f.nameTok.to : 1, `Flow '${f.name}' has no source or target`);
+      warn(pos ? pos.from : 0, pos ? pos.to : 1, `Flow '${f.name}' has no source or target`);
     }
-    if (f.rate === undefined) warn(f.nameTok ? f.nameTok.from : 0, f.nameTok ? f.nameTok.to : 1, `Flow '${f.name}' has no rate`);
+    if (f.rate === undefined) warn(pos ? pos.from : 0, pos ? pos.to : 1, `Flow '${f.name}' has no rate`);
   }
   for (const t of model.transitions) {
     checkEndpoint(t.source, t.scope, 'state', 'Transition source');
@@ -824,13 +934,19 @@ export function analyze(text) {
     diagnostics.push({ from: 0, to: 1, severity: 'error', message: 'sim step must be greater than 0' });
   }
 
-  // Plottables: top-level series the UI can chart by default.
+  // Plottables: the top-level series the UI charts and tabulates. Which kinds
+  // are included is set by `sim { plot: … }` (default: stocks only).
+  const plotKinds = new Set(config.plot);
   const plottables = [];
-  for (const s of model.stocks) if (s.scope === 'model') plottables.push({ name: s.name, kind: 'stock' });
-  for (const v of model.variables) if (v.scope === 'model') plottables.push({ name: v.name, kind: 'variable' });
-  for (const c of model.converters) if (c.scope === 'model') plottables.push({ name: c.name, kind: 'converter' });
-  for (const f of model.flows) if (f.scope === 'model') plottables.push({ name: f.name, kind: 'flow' });
-  for (const st of model.states) if (st.scope === 'model') plottables.push({ name: st.name, kind: 'state' });
+  const pushPlottable = (records, kind) => {
+    if (!plotKinds.has(kind)) return;
+    for (const r of records) if (r.scope === 'model') plottables.push({ name: r.name, kind });
+  };
+  pushPlottable(model.stocks, 'stock');
+  pushPlottable(model.variables, 'variable');
+  pushPlottable(model.converters, 'converter');
+  pushPlottable(model.flows, 'flow');
+  pushPlottable(model.states, 'state');
 
   diagnostics.sort((a, b) => a.from - b.from);
   return { config, name, description, model, symbols, diagnostics, plottables };
