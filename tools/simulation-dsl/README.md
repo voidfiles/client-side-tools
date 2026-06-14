@@ -24,39 +24,51 @@ controllable, and LLM-friendly, while the engine keeps ownership of execution
 
 ## The language
 
+The notation is terse and sigil-led: **`@` is a stock, `$` is a variable, and a
+bare `Source -> Target` arrow is a flow.** Block bodies are `key: value` pairs
+separated by commas; strings are quoted; numbers are bare and need a leading
+digit (write `0.5`, not `.5`).
+
 ### Simulation settings
 
 ```
 sim {
-  start 0          # start time (default 0)
-  length 50        # run length in time units (default 100)
-  step 0.5         # integration time step, DT (default 1)
-  units Years      # Seconds|Minutes|Hours|Days|Weeks|Months|Years
-  algorithm RK4    # RK4 (default) or Euler
+  start: 0,          # start time (default 0)
+  length: 50,        # run length in time units (default 100)
+  step: 0.5,         # integration time step, DT (default 1)
+  units: 'Years',    # Seconds|Minutes|Hours|Days|Weeks|Months|Years
+  algorithm: RK4,    # RK4 (default) or Euler
+  plot: [stock]      # which kinds to chart/tabulate (default: stocks only)
 }
 
-name "My Model"            # optional
-description "..."          # optional
+name 'My Model'            # optional
+description '...'          # optional
 ```
+
+By default the chart and table show only **stocks**. Set `plot` to a list of
+kinds (`stock`, `variable`, `flow`, `converter`, `state`) — or `all` / `none` —
+to change what is graphed, e.g. `plot: [stock, flow]`.
 
 ### System dynamics primitives
 
 ```
-stock Prey { initial 400  nonNegative  units "Prey" }
-stock Belt { initial 0  type Conveyor  delay 5 }     # Store (default) | Conveyor
-stock Quick = 100                                    # shorthand sets `initial`
+@Prey  { initial: 400, nonNegative: true, units: "Prey" }
+@Belt  { initial: 0, type: Conveyor, delay: 5 }      # Store (default) | Conveyor
+@Quick = 100                                         # shorthand sets `initial`
+@Empty                                               # no body → initial defaults to 0
 
-variable Rate = 0.25 { units "1 / Years" }           # shorthand sets `value`
-variable Death { value "0.005 * [Predators]" }
+$Rate = 0.25 { units: "1 / Years" }                  # shorthand sets `value`
+$Death { value: "0.005 * [Predators]" }
 
-# flow Name: source -> target     (use `_` for an external source/sink)
-flow Births: _ -> Prey  { rate "[Prey] * [Rate]"  nonNegative }
-flow Deaths: Prey -> _  = "[Prey] * 0.1"             # shorthand sets `rate`
+# A flow is just `Source -> Target` (use `_` for an external source/sink). It is
+# auto-named `{Source}To{Target}`; prefix `Name:` to name it yourself.
+_ -> Prey         { rate: "[Prey] * [Rate]", nonNegative: true }   # ExternalToPrey
+Deaths: Prey -> _ = "[Prey] * 0.1"                                 # shorthand sets `rate`
 
 converter Growth {
-  input Population        # `time`, or the name of another primitive
-  interpolation Linear    # Linear (default) | Discrete
-  points (0, 2) (5000, 1) (10000, 0)
+  input: Population,      # `time`, or the name of another primitive
+  interpolation: Linear,  # Linear (default) | Discrete
+  points: (0, 2) (5000, 1) (10000, 0)
 }
 
 link Rate -> Births       # explicit link (links are otherwise inferred)
@@ -66,35 +78,36 @@ link Rate -> Births       # explicit link (links are otherwise inferred)
 
 ```
 agent Person {
-  state Healthy  { startActive true }
-  state Infected { startActive false }
+  state Healthy  { startActive: true }
+  state Infected { startActive: false }
 
   # transition Name: from -> to     (`_` = enter from / leave to nowhere)
-  transition Catch: Healthy -> Infected { trigger Probability  value 0.05 }
-  transition Heal:  Infected -> Healthy { trigger Timeout       value "{14 days}" }
+  transition Catch: Healthy -> Infected { trigger: Probability, value: 0.05 }
+  transition Heal:  Infected -> Healthy { trigger: Timeout,     value: "{14 days}" }
 
   # agents can own their own stocks/variables/flows too
-  stock Age { initial 0 }
+  @Age { initial: 0 }
 }
 
 population Pop {
-  size 200
-  base Person                       # the agent definition to instantiate
-  placement Grid                    # optional: Random|Network|Grid|Ellipse|"Custom Function"
-  network "Custom Function"         # optional
+  size: 200,
+  base: Person,                     # the agent definition to instantiate
+  placement: Grid,                  # optional: Random|Network|Grid|Ellipse|"Custom Function"
+  network: "Custom Function"        # optional
 }
 
 action Reset {
-  trigger Timeout      # Timeout | Probability | Condition
-  value 30
-  do "[Healthy] <- true"            # equation run when triggered
+  trigger: Timeout,    # Timeout | Probability | Condition
+  value: 30,
+  do: "[Healthy] <- true"           # equation run when triggered
 }
 ```
 
-To chart agent counts, add population-level variables that query states:
+To chart agent counts, add population-level variables that query states (and set
+`sim { plot: [variable] }`, since there are no top-level stocks):
 
 ```
-variable "Num Infected" { value "Count([Pop].FindState([Infected]))" }
+$"Num Infected" { value: "Count([Pop].FindState([Infected]))" }
 ```
 
 (Name counting variables differently from the states they count — a top-level
@@ -102,21 +115,24 @@ variable "Num Infected" { value "Count([Pop].FindState([Infected]))" }
 
 ### Values, names, and references
 
-- A property value is a **number** (`400`), a **"quoted equation/units string"**
-  passed verbatim to the engine, a **boolean** (`true`/`false`), or a bare keyword
-  (enum values like `RK4`, `Linear`).
-- Names are identifiers or `"quoted strings"` (for names with spaces or symbols
-  like `β`). References inside equations are `[Name]` and resolve
-  case-insensitively.
-- Comments start with `#` or `//`. Properties are separated by newlines or `;`.
+- A property value is a **number** (`400`, `0.5` — a leading digit is required),
+  a **'quoted equation/units string'** passed verbatim to the engine, a
+  **boolean** (`true`/`false`), a bare keyword (enum values like `RK4`,
+  `Linear`), or a **`[list]`** (used by `plot`). Both `'…'` and `"…"` quote a
+  string.
+- Names are identifiers or `'quoted strings'` (for names with spaces or symbols
+  like `β`); a stock/variable declaration prefixes the name with `@`/`$`.
+  References inside equations are `[Name]` and resolve case-insensitively.
+- Comments start with `#` or `//`. Properties are separated by commas (newlines
+  or `;` also work), and labels from values by `:`.
 
 ## Mapping to the engine
 
 | DSL | Engine primitive |
 |---|---|
-| `stock` | `Model.Stock` (`initial`, `nonNegative`, `type`, `delay`, `units`, `min`/`max`) |
-| `variable` | `Model.Variable` (`value`, `units`, `min`/`max`) |
-| `flow A: x -> y` | `Model.Flow(x, y, …)` (`rate`, `nonNegative`) |
+| `@Name` | `Model.Stock` (`initial`, `nonNegative`, `type`, `delay`, `units`, `min`/`max`) |
+| `$Name` | `Model.Variable` (`value`, `units`, `min`/`max`) |
+| `x -> y` | `Model.Flow(x, y, …)` (`rate`, `nonNegative`); auto-named `{x}To{y}` |
 | `converter` | `Model.Converter` (`input`, `interpolation`, `values`) |
 | `state` | `Model.State` (`startActive`, `residency`) |
 | `transition A: x -> y` | `Model.Transition(x, y, …)` (`trigger`, `value`, `repeat`, `recalculate`) |
