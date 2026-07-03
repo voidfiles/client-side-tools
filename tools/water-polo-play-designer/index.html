@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Polo Play Designer - Client-Side Tools</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤽</text></svg>">
+<style>
+  :root{
+    --bg:#0e151d; --panel:#17222e; --panel2:#1e2c3b; --line:#2c3e50;
+    --text:#e9f0f6; --dim:#9db0c0; --accent:#ffd166; --accent2:#3ddc84;
+    --danger:#ff6b6b; --sel:#4dd0e1;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px; line-height:1.2;
+  }
+  button:hover{background:#26374a;}
+  button:disabled{opacity:.4; cursor:default;}
+  button.primary{background:var(--accent); color:#20242c; border-color:transparent; font-weight:600;}
+  button.primary:hover{background:#ffdd88;}
+  button.active{background:var(--sel); color:#0b2a30; border-color:transparent; font-weight:600;}
+  select,input[type=text],input[type=number]{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font-size:13px;
+  }
+  input[type=checkbox]{accent-color:var(--accent);}
+  label.chk{display:inline-flex; align-items:center; gap:5px; color:var(--dim); cursor:pointer; white-space:nowrap;}
+
+  header{background:var(--panel); border-bottom:1px solid var(--line); padding:7px 12px; flex:0 0 auto;}
+  .hrow{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .hrow + .hrow{margin-top:6px;}
+  header h1{font-size:16px; font-weight:700; white-space:nowrap;}
+  header .back{color:var(--dim); text-decoration:none; font-size:13px; white-space:nowrap;}
+  header .back:hover{color:var(--text);}
+  #playName{width:200px; font-weight:600;}
+  .spacer{flex:1;}
+  .grp{display:flex; align-items:center; gap:6px; padding:2px 8px; border-left:1px solid var(--line);}
+  .grp:first-child{border-left:none; padding-left:0;}
+  .glabel{color:var(--dim); font-size:12px; white-space:nowrap;}
+
+  main{flex:1 1 auto; display:flex; min-height:0;}
+  #toolbar{
+    flex:0 0 118px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; gap:5px; padding:10px 8px; overflow-y:auto;
+  }
+  #toolbar button{text-align:left; display:flex; align-items:center; gap:7px; padding:8px 8px;}
+  #toolbar .swatch{width:16px; text-align:center; font-size:14px; flex:0 0 16px;}
+  #legend{margin-top:auto; padding-top:10px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); line-height:1.9;}
+  #legend .lg{display:flex; align-items:center; gap:6px;}
+  #legend svg{flex:0 0 34px;}
+
+  #stage{flex:1 1 auto; position:relative; min-width:0; background:#0a1016; display:flex; align-items:center; justify-content:center;}
+  #pool{display:block; touch-action:none;}
+
+  #panel{
+    flex:0 0 228px; background:var(--panel); border-left:1px solid var(--line);
+    padding:12px 12px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;
+  }
+  #panel h3{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:6px;}
+  #panel .row{display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap;}
+  #panel .row label{color:var(--dim); font-size:12px;}
+  #hint{font-size:12px; color:var(--dim); line-height:1.5; background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px;}
+
+  footer{flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);}
+  #transport{display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--line);}
+  #scrub{flex:1;}
+  input[type=range]{accent-color:var(--accent); height:22px;}
+  #timeStr{font-variant-numeric:tabular-nums; color:var(--dim); font-size:12px; white-space:nowrap;}
+  #timelineWrap{display:flex; align-items:stretch; gap:8px; padding:8px 12px; overflow-x:auto;}
+  .thumb{
+    flex:0 0 auto; background:var(--panel2); border:2px solid var(--line); border-radius:6px;
+    padding:4px; cursor:pointer; position:relative; display:flex; flex-direction:column; gap:3px;
+  }
+  .thumb.cur{border-color:var(--accent);}
+  .thumb.playing{border-color:var(--accent2);}
+  .thumb canvas{display:block; border-radius:3px; background:#123;}
+  .thumb .cap{display:flex; justify-content:space-between; font-size:11px; color:var(--dim); padding:0 2px;}
+  .thumb .del{
+    position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%;
+    background:var(--danger); color:#fff; border:none; font-size:11px; line-height:1; padding:0; display:none;
+  }
+  .thumb:hover .del{display:block;}
+  .thumb.dragover{outline:2px dashed var(--sel);}
+  #addFrameBtn{flex:0 0 auto; align-self:stretch; font-size:13px; padding:0 16px;}
+
+  /* modal */
+  .overlay{position:fixed; inset:0; background:rgba(4,8,12,.72); display:none; align-items:center; justify-content:center; z-index:50;}
+  .overlay.show{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; width:340px; max-width:92vw;}
+  .modal h2{font-size:15px; margin-bottom:12px;}
+  .modal .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .modal .row label{color:var(--dim);}
+  .modal .btns{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+  #progBarWrap{background:var(--panel2); border-radius:5px; height:10px; overflow:hidden; margin:12px 0 4px;}
+  #progBar{height:100%; width:0%; background:var(--accent2); transition:width .15s;}
+  #progText{color:var(--dim); font-size:12px;}
+
+  #toast{
+    position:fixed; left:50%; bottom:120px; transform:translateX(-50%);
+    background:#101820ee; border:1px solid var(--line); color:var(--text);
+    padding:9px 16px; border-radius:8px; font-size:13px; z-index:60;
+    opacity:0; pointer-events:none; transition:opacity .25s; max-width:70vw; text-align:center;
+  }
+  #toast.show{opacity:1;}
+  kbd{background:var(--panel2); border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:11px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <a href="../../" class="back">← Tools</a>
+    <h1>Water Polo Play Designer</h1>
+    <input type="text" id="playName" value="New Play" title="Play name">
+    <div class="grp">
+      <button id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button id="redoBtn" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="grp">
+      <button id="saveBtn" title="Download play as JSON">Save JSON</button>
+      <button id="loadBtn" title="Load play from JSON">Load</button>
+      <input type="file" id="loadFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="grp">
+      <button id="gifBtn" class="primary" title="Export animated GIF">Export GIF</button>
+      <button id="vidBtn" class="primary" title="Export WebM video">Export Video</button>
+    </div>
+  </div>
+  <div class="hrow">
+    <div class="grp">
+      <button id="preset66">Reset to 6-on-6</button>
+      <button id="preset42">4-2 Set</button>
+      <button id="presetClear">Empty Pool</button>
+    </div>
+    <div class="grp">
+      <span class="glabel">Pool</span>
+      <select id="poolLen"><option value="25">25 m (default)</option><option value="30">30 m (men's)</option></select>
+      <select id="lineRule"><option value="6">6 m line</option><option value="5">5 m line</option></select>
+    </div>
+    <div class="grp">
+      <label class="chk"><input type="checkbox" id="frontToggle" checked> Frontcourt view</label>
+      <label class="chk"><input type="checkbox" id="snapToggle"> Grid snap</label>
+    </div>
+  </div>
+</header>
+
+<main>
+  <aside id="toolbar">
+    <button data-tool="select" class="active"><span class="swatch">↖</span>Select <kbd>V</kbd></button>
+    <button data-tool="addO"><span class="swatch">⬤</span>Add White</button>
+    <button data-tool="addD"><span class="swatch" style="color:#4d6fd8">⬤</span>Add Blue</button>
+    <button data-tool="ball"><span class="swatch" style="color:#ffd166">●</span>Ball <kbd>B</kbd></button>
+    <button data-tool="drive"><span class="swatch" style="color:#3ddc84">→</span>Drive <kbd>D</kbd></button>
+    <button data-tool="pass"><span class="swatch" style="color:#ffd166">⇢</span>Pass <kbd>P</kbd></button>
+    <button data-tool="screen"><span class="swatch">⊥</span>Screen <kbd>S</kbd></button>
+    <button data-tool="label"><span class="swatch">T</span>Text <kbd>T</kbd></button>
+    <button data-tool="erase"><span class="swatch" style="color:#ff6b6b">✕</span>Erase <kbd>E</kbd></button>
+    <div id="legend">
+      <div class="lg"><svg width="34" height="10"><line x1="1" y1="5" x2="26" y2="5" stroke="#3ddc84" stroke-width="2"/><path d="M25 1 L33 5 L25 9 Z" fill="#3ddc84"/></svg>drive</div>
+      <div class="lg"><svg width="34" height="10"><line x1="1" y1="5" x2="26" y2="5" stroke="#ffd166" stroke-width="2" stroke-dasharray="5 3"/><path d="M25 1 L33 5 L25 9 Z" fill="#ffd166"/></svg>pass</div>
+      <div class="lg"><svg width="34" height="12"><line x1="1" y1="6" x2="28" y2="6" stroke="#e9f0f6" stroke-width="2"/><line x1="28" y1="1" x2="28" y2="11" stroke="#e9f0f6" stroke-width="2"/></svg>screen</div>
+    </div>
+  </aside>
+
+  <div id="stage"><canvas id="pool"></canvas></div>
+
+  <aside id="panel">
+    <div>
+      <h3 id="frameTitle">Frame 1 of 1</h3>
+      <div class="row" id="durRow">
+        <label for="durInput">Transition in</label>
+        <input type="number" id="durInput" min="100" max="20000" step="100" value="1200" style="width:76px"> <span style="color:var(--dim)">ms</span>
+      </div>
+      <div class="row">
+        <button id="addFramePanelBtn">＋ Add Frame</button>
+        <button id="delFrameBtn" title="Delete current frame">Delete</button>
+      </div>
+    </div>
+    <div id="selBox" style="display:none">
+      <h3>Selected Player</h3>
+      <div class="row"><label>Cap #</label><input type="number" id="capInput" min="1" max="99" style="width:60px"></div>
+      <div class="row"><label>Team</label>
+        <select id="teamInput"><option value="W">White</option><option value="B">Blue</option></select>
+      </div>
+      <div class="row"><label class="chk"><input type="checkbox" id="gkInput"> Goalkeeper (red cap)</label></div>
+      <div class="row"><button id="removePlayerBtn" style="color:var(--danger)">Remove player</button></div>
+    </div>
+    <div>
+      <h3>Tool</h3>
+      <div id="hint"></div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div id="transport">
+    <button id="playBtn" style="width:74px">▶ Play</button>
+    <label class="chk"><input type="checkbox" id="loopToggle" checked> Loop</label>
+    <span class="glabel">Speed</span>
+    <select id="speedSel">
+      <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+    </select>
+    <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+    <span id="timeStr">0.0 / 0.0 s</span>
+  </div>
+  <div id="timelineWrap">
+    <div id="timeline" style="display:flex; gap:8px;"></div>
+    <button id="addFrameBtn" title="Add a frame that starts from the current frame's end state">＋ Add<br>Frame</button>
+  </div>
+</footer>
+
+<!-- Export modal -->
+<div class="overlay" id="exportModal">
+  <div class="modal">
+    <h2 id="exportTitle">Export GIF</h2>
+    <div class="row"><label>Resolution (width)</label>
+      <select id="expWidth">
+        <option value="640">640 px</option>
+        <option value="960" selected>960 px</option>
+        <option value="1280">1280 px</option>
+        <option value="1920">1920 px</option>
+      </select>
+    </div>
+    <div class="row"><label>Frame rate</label>
+      <select id="expFps">
+        <option value="10">10 fps</option><option value="15" selected>15 fps</option>
+        <option value="24">24 fps</option><option value="30">30 fps</option>
+      </select>
+    </div>
+    <div class="row" id="expLoopRow"><label>Play-throughs</label>
+      <select id="expLoops"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select>
+    </div>
+    <div class="row"><span id="expNote" style="color:var(--dim); font-size:12px;">Exports the current view (frontcourt / full pool).</span></div>
+    <div class="btns">
+      <button id="expCancel">Cancel</button>
+      <button id="expStart" class="primary">Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- Progress modal -->
+<div class="overlay" id="progModal">
+  <div class="modal">
+    <h2 id="progTitle">Exporting…</h2>
+    <div id="progBarWrap"><div id="progBar"></div></div>
+    <div id="progText">Rendering frames…</div>
+    <div class="btns"><button id="progCancel">Cancel</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =======================================================================
+   Water Polo Play Designer — self-contained single-page app.
+   Data model: a Play is an ordered list of Frames; drives/passes/screens
+   stored on frame i describe the transition FROM frame i-1 INTO frame i.
+   All positions are in meters; x across the pool width, y along the
+   length, with the attacked goal line at y = 0.
+   ======================================================================= */
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp = (a,b,t)=>a+(b-a)*t;
+const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+const easeInOut = t => t<0 ? 0 : t>1 ? 1 : (t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2);
+const deep = o => JSON.parse(JSON.stringify(o));
+
+const COLORS = {
+  deck:'#101a24', water:'#2b6ea8', waterFront:'#2f76b2',
+  lineWhite:'#f2f6fa', lineRed:'#ff5252', lineYellow:'#ffe14d',
+  drive:'#3ddc84', pass:'#ffd166', screen:'#eef3f8', implied:'rgba(240,246,252,0.38)',
+  ball:'#ffc233', ballEdge:'#7a5200',
+  capW:'#f4f7fa', capWText:'#16202b', capB:'#28409c', capBText:'#ffffff',
+  capGK:'#d63031', sel:'#4dd0e1', ghost:0.30
+};
+const PLAYER_R = 0.5;          // meters
+const BALL_R = 0.32;
+const BALL_OFF = {x:0.55, y:-0.4};   // held-ball offset from the holder
+const END_HOLD_MS = 700;       // pause on the final frame before looping / in exports
+
+/* ---------------- state ---------------- */
+let idCounter = 1;
+const uid = p => p + (idCounter++);
+
+let play = null;   // {meta, frames}
+const ui = {
+  tool:'select', currentFrame:0, view:'front', snap:false,
+  selection:null,          // {type:'player', id} | null
+  playing:false, animActive:false, time:0, speed:1, loop:true,
+  draft:null,              // in-progress drive/pass/screen drawing
+  drag:null,               // in-progress select-drag
+};
+let undoStack = [], redoStack = [];
+const UNDO_MAX = 100;
+const LS_KEY = 'water-polo-play-designer:v1';
+
+function makeFrame(players, ball){
+  return { id: uid('f'), durationMs: 1200, players: players||[], ball: ball||{x:10,y:8},
+           drives: [], passes: [], screens: [], labels: [] };
+}
+function meta(){ return play.meta; }
+function curFrame(){ return play.frames[ui.currentFrame]; }
+function frameById(fid){ return play.frames.find(f=>f.id===fid); }
+function playerIn(frame,id){ return frame.players.find(p=>p.id===id); }
+
+/* ---------------- presets ---------------- */
+function goalCenter(){ return {x: meta().poolWidthM/2, y: 0}; }
+
+function markUp(attackers, spacing){
+  // place each defender between their attacker and the attacked goal
+  return attackers.map(a=>{
+    const g = goalCenter();
+    const d = Math.max(0.01, dist(a,g));
+    const t = Math.min(spacing/d, 0.5);
+    return { x: lerp(a.x, g.x, t), y: lerp(a.y, g.y, t) };
+  });
+}
+function buildPreset(offSpots){
+  const W = meta().poolWidthM, L = meta().poolLengthM;
+  const players = [];
+  offSpots.forEach((s,i)=> players.push({id:'o'+(i+1), team:'W', gk:false, cap:i+1, x:s.x, y:s.y}));
+  markUp(offSpots, 1.1).forEach((s,i)=> players.push({id:'d'+(i+1), team:'B', gk:false, cap:i+1, x:s.x, y:s.y}));
+  players.push({id:'ogk', team:'W', gk:true, cap:1, x:W/2, y:L-0.7});
+  players.push({id:'dgk', team:'B', gk:true, cap:1, x:W/2, y:0.7});
+  return players;
+}
+function applyPreset(kind){
+  pushUndo();
+  const W = meta().poolWidthM;
+  const cx = W/2;
+  let frames;
+  if(kind==='clear'){
+    frames = [ makeFrame([], {x:cx, y:8}) ];
+  }else if(kind==='42'){
+    // 4-2: two posts inside, four on the perimeter
+    const off = [
+      {x:cx-6.5, y:4.6},  // 1 left perimeter
+      {x:cx-2.4, y:6.6},  // 2
+      {x:cx+2.4, y:6.6},  // 3
+      {x:cx+6.5, y:4.6},  // 4
+      {x:cx-2.0, y:2.5},  // 5 left post
+      {x:cx+2.0, y:2.5},  // 6 right post
+    ];
+    frames = [ makeFrame(buildPreset(off), {holderId:'o2'}) ];
+  }else{
+    // Standard 6-on-6 umbrella: point, flats, wings, hole set at 2 m
+    const off = [
+      {x:cx,     y:7.2},  // 1 point
+      {x:cx-3.6, y:5.2},  // 2 left flat
+      {x:cx+3.6, y:5.2},  // 3 right flat
+      {x:cx-6.5, y:1.6},  // 4 left wing
+      {x:cx+6.5, y:1.6},  // 5 right wing
+      {x:cx,     y:2.6},  // 6 hole set
+    ];
+    frames = [ makeFrame(buildPreset(off), {holderId:'o1'}) ];
+  }
+  play.frames = frames;
+  ui.currentFrame = 0; ui.selection = null; stopPlayback();
+  commit();
+}
+function newPlay(){
+  play = { meta:{ name:'New Play', poolLengthM:25, poolWidthM:20, sixMeterLine:true, fps:30 }, frames:[] };
+  play.frames = [ makeFrame([], {x:10,y:8}) ];
+}
+
+/* ---------------- undo / redo ---------------- */
+function snapshot(){ return { play: deep(play), cur: ui.currentFrame }; }
+function pushUndo(){
+  undoStack.push(snapshot());
+  if(undoStack.length>UNDO_MAX) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+function restore(s){
+  play = deep(s.play);
+  ui.currentFrame = clamp(s.cur, 0, play.frames.length-1);
+  ui.selection = null; ui.draft = null; ui.drag = null;
+  stopPlayback();
+  commit(false);
+}
+function undo(){ if(!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateUndoButtons(); }
+function redo(){ if(!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateUndoButtons(); }
+function updateUndoButtons(){ $('undoBtn').disabled = !undoStack.length; $('redoBtn').disabled = !redoStack.length; }
+
+/* ---------------- geometry helpers ---------------- */
+function pathLen(pts){ let l=0; for(let i=1;i<pts.length;i++) l+=dist(pts[i-1],pts[i]); return l; }
+function pointAlongPath(pts, frac){
+  if(pts.length===1) return {...pts[0]};
+  const total = pathLen(pts);
+  if(total<=0) return {...pts[pts.length-1]};
+  let target = clamp(frac,0,1)*total;
+  for(let i=1;i<pts.length;i++){
+    const seg = dist(pts[i-1],pts[i]);
+    if(target<=seg && seg>0){ const t=target/seg; return {x:lerp(pts[i-1].x,pts[i].x,t), y:lerp(pts[i-1].y,pts[i].y,t)}; }
+    target -= seg;
+  }
+  return {...pts[pts.length-1]};
+}
+function pointSegDist(p,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y, l2=dx*dx+dy*dy;
+  if(l2===0) return dist(p,a);
+  const t = clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/l2, 0, 1);
+  return dist(p, {x:a.x+t*dx, y:a.y+t*dy});
+}
+function pointPathDist(p, pts){
+  let m=Infinity;
+  for(let i=1;i<pts.length;i++) m=Math.min(m, pointSegDist(p, pts[i-1], pts[i]));
+  return m;
+}
+function rdp(pts, eps){
+  if(pts.length<3) return pts.slice();
+  let maxD=0, idx=0;
+  for(let i=1;i<pts.length-1;i++){
+    const d = pointSegDist(pts[i], pts[0], pts[pts.length-1]);
+    if(d>maxD){ maxD=d; idx=i; }
+  }
+  if(maxD>eps){
+    const a = rdp(pts.slice(0,idx+1), eps), b = rdp(pts.slice(idx), eps);
+    return a.slice(0,-1).concat(b);
+  }
+  return [pts[0], pts[pts.length-1]];
+}
+function qBez(a,c,b,t){
+  const u=1-t;
+  return { x:u*u*a.x+2*u*t*c.x+t*t*b.x, y:u*u*a.y+2*u*t*c.y+t*t*b.y };
+}
+function passCtrl(a,b){
+  const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+  const dx=b.x-a.x, dy=b.y-a.y, l=Math.hypot(dx,dy)||1;
+  const k = Math.min(1.4, l*0.12);
+  return { x:mx + (dy/l)*k, y:my - (dx/l)*k };
+}
+
+/* ---------------- viewport ---------------- */
+function viewRect(){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  if(ui.view==='front') return { x:-1.3, y:-1.8, w:W+2.6, h:L/2+2.6 };
+  return { x:-1.3, y:-1.8, w:W+2.6, h:L+3.6 };
+}
+function makeVp(cw,ch,vr){
+  const scale = Math.min(cw/vr.w, ch/vr.h);
+  return { scale,
+    ox: (cw - vr.w*scale)/2 - vr.x*scale,
+    oy: (ch - vr.h*scale)/2 - vr.y*scale };
+}
+const w2s = (vp,p)=>({x:vp.ox+p.x*vp.scale, y:vp.oy+p.y*vp.scale});
+const s2w = (vp,p)=>({x:(p.x-vp.ox)/vp.scale, y:(p.y-vp.oy)/vp.scale});
+
+const canvas = $('pool');
+const cx2d = canvas.getContext('2d');
+let mainVp = null;
+
+function fitCanvas(){
+  const stage = $('stage');
+  const availW = stage.clientWidth - 8, availH = stage.clientHeight - 8;
+  const vr = viewRect();
+  const scale = Math.min(availW/vr.w, availH/vr.h);
+  const cw = Math.max(60, Math.floor(vr.w*scale)), ch = Math.max(60, Math.floor(vr.h*scale));
+  const dpr = window.devicePixelRatio||1;
+  canvas.style.width = cw+'px'; canvas.style.height = ch+'px';
+  canvas.width = Math.round(cw*dpr); canvas.height = Math.round(ch*dpr);
+  cx2d.setTransform(dpr,0,0,dpr,0,0);
+  mainVp = makeVp(cw,ch,vr);
+}
+
+/* ---------------- ball / player resolution ---------------- */
+function resolveBallStatic(frame){
+  if(frame.ball && frame.ball.holderId){
+    const h = playerIn(frame, frame.ball.holderId);
+    if(h) return { x:h.x+BALL_OFF.x, y:h.y+BALL_OFF.y };
+    return {x:meta().poolWidthM/2, y:8};
+  }
+  return { x:frame.ball.x, y:frame.ball.y };
+}
+
+/* Animated position of a player during the transition into frame i at raw progress p */
+function playerPosAtRaw(i, id, p){
+  const B = play.frames[i], A = play.frames[i-1];
+  const pb = playerIn(B,id);
+  if(!pb) return null;
+  const pa = A ? playerIn(A,id) : null;
+  if(!pa) return {x:pb.x, y:pb.y};
+  const pe = easeInOut(p);
+  const drive = (B.drives||[]).find(d=>d.playerId===id);
+  if(drive && drive.points.length){
+    return pointAlongPath([{x:pa.x,y:pa.y}, ...drive.points], pe);
+  }
+  return { x:lerp(pa.x,pb.x,pe), y:lerp(pa.y,pb.y,pe) };
+}
+
+function endpointStatic(ep, frame){
+  if(typeof ep==='string'){ const pl=playerIn(frame,ep); return pl?{x:pl.x,y:pl.y}:null; }
+  return ep ? {x:ep.x, y:ep.y} : null;
+}
+
+/* ---------------- timeline / scene sampling ---------------- */
+function timelineSegments(){
+  const segs=[]; let acc=0;
+  for(let i=1;i<play.frames.length;i++){
+    const d = Math.max(100, play.frames[i].durationMs||1000);
+    segs.push({i, start:acc, dur:d}); acc+=d;
+  }
+  return {segs, total:acc};
+}
+function staticScene(i){
+  const f = play.frames[i];
+  return { frameIndex:i, progress:1,
+    players: f.players.map(p=>({...p})),
+    ballPos: resolveBallStatic(f) };
+}
+function sampleScene(t){
+  const {segs,total} = timelineSegments();
+  if(!segs.length) return staticScene(0);
+  if(t<=0) return staticScene(0);
+  if(t>=total) return staticScene(play.frames.length-1);
+  const seg = segs.find(s=> t < s.start+s.dur);
+  return transitionScene(seg.i, (t-seg.start)/seg.dur);
+}
+function transitionScene(i, p){
+  const A = play.frames[i-1], B = play.frames[i];
+  const players = B.players.map(pb=>({ ...pb, ...playerPosAtRaw(i, pb.id, p) }));
+  const posOf = (id, raw)=> playerPosAtRaw(i, id, raw) || {x:10,y:10};
+
+  let ballPos;
+  const passes = B.passes||[];
+  if(passes.length){
+    const n = passes.length;
+    const k = Math.min(n-1, Math.floor(p*n));
+    const q = easeInOut(clamp(p*n-k, 0, 1));
+    const pass = passes[k];
+    const fromPos = typeof pass.from==='string' ? posOf(pass.from, k/n) : {x:pass.from.x,y:pass.from.y};
+    const toPos = typeof pass.to==='string' ? posOf(pass.to, p) : {x:pass.to.x,y:pass.to.y};
+    if(typeof pass.from==='string'){ fromPos.x+=BALL_OFF.x; fromPos.y+=BALL_OFF.y; }
+    const toBall = typeof pass.to==='string' ? {x:toPos.x+BALL_OFF.x, y:toPos.y+BALL_OFF.y} : toPos;
+    ballPos = qBez(fromPos, passCtrl(fromPos,toBall), toBall, q);
+  }else{
+    const aH = A.ball && A.ball.holderId, bH = B.ball && B.ball.holderId;
+    if(aH && bH && aH===bH){
+      const hp = posOf(bH, p);
+      ballPos = {x:hp.x+BALL_OFF.x, y:hp.y+BALL_OFF.y};
+    }else{
+      const a = resolveBallStatic(A), b = resolveBallStatic(B);
+      const pe = easeInOut(p);
+      ballPos = { x:lerp(a.x,b.x,pe), y:lerp(a.y,b.y,pe) };
+    }
+  }
+  return { frameIndex:i, progress:p, players, ballPos };
+}
+
+/* ---------------- rendering ---------------- */
+function renderPool(ctx, vp, cw, ch){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  ctx.fillStyle = COLORS.deck;
+  ctx.fillRect(0,0,cw,ch);
+
+  const tl = w2s(vp,{x:0,y:0}), br = w2s(vp,{x:W,y:L});
+  ctx.fillStyle = COLORS.water;
+  ctx.fillRect(tl.x, tl.y, br.x-tl.x, br.y-tl.y);
+
+  const s = vp.scale;
+  const lw = Math.max(1.5, 0.14*s);
+  const kLine = meta().sixMeterLine ? 6 : 5;
+
+  function line(x1,y1,x2,y2,color,width){
+    const a=w2s(vp,{x:x1,y:y1}), b=w2s(vp,{x:x2,y:y2});
+    ctx.strokeStyle=color; ctx.lineWidth=width||lw;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+
+  // grid (when snapping)
+  if(ui.snap && ctx===cx2d){
+    ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=1;
+    for(let x=1;x<W;x++){ const a=w2s(vp,{x,y:0}), b=w2s(vp,{x,y:L}); ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+    for(let y=1;y<L;y++){ const a=w2s(vp,{x:0,y}), b=w2s(vp,{x:W,y}); ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+  }
+
+  const ends = ui.view==='front' ? [{gl:0, dir:1}] : [{gl:0, dir:1},{gl:L, dir:-1}];
+  for(const e of ends){
+    line(0, e.gl+2*e.dir, W, e.gl+2*e.dir, COLORS.lineRed);
+    line(0, e.gl+kLine*e.dir, W, e.gl+kLine*e.dir, COLORS.lineYellow);
+    line(0, e.gl, W, e.gl, COLORS.lineWhite);         // goal line
+
+    // goal: 3 m wide, centered, drawn behind the goal line
+    const gx1=W/2-1.5, gx2=W/2+1.5, depth=1.0*e.dir;
+    const a=w2s(vp,{x:gx1, y:e.gl-depth}), b=w2s(vp,{x:gx2, y:e.gl});
+    ctx.strokeStyle=COLORS.lineWhite; ctx.lineWidth=Math.max(1.5,0.12*s);
+    ctx.strokeRect(Math.min(a.x,b.x), Math.min(a.y,b.y), Math.abs(b.x-a.x), Math.abs(b.y-a.y));
+    ctx.save();
+    ctx.strokeStyle='rgba(242,246,250,0.45)'; ctx.lineWidth=1;
+    for(let i=1;i<6;i++){
+      const xx = lerp(gx1,gx2,i/6);
+      const p1=w2s(vp,{x:xx,y:e.gl-depth}), p2=w2s(vp,{x:xx,y:e.gl});
+      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    }
+    ctx.restore();
+
+    // corner re-entry marks (red brackets at each goal-line corner)
+    ctx.strokeStyle=COLORS.lineRed; ctx.lineWidth=Math.max(2,0.18*s);
+    for(const side of [0,W]){
+      const inward = side===0 ? 1 : -1;
+      const c=w2s(vp,{x:side, y:e.gl});
+      const c1=w2s(vp,{x:side+0.9*inward, y:e.gl});
+      const c2=w2s(vp,{x:side, y:e.gl+0.9*e.dir});
+      ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c.x,c.y); ctx.lineTo(c2.x,c2.y); ctx.stroke();
+    }
+
+    // distance labels
+    ctx.fillStyle='rgba(242,246,250,0.75)';
+    ctx.font = `${Math.max(9, 0.55*s)}px sans-serif`;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    const l2=w2s(vp,{x:0.25, y:e.gl+2*e.dir});    ctx.fillText('2m', l2.x, l2.y - 0.45*s*e.dir);
+    const l6=w2s(vp,{x:0.25, y:e.gl+kLine*e.dir}); ctx.fillText(kLine+'m', l6.x, l6.y - 0.45*s*e.dir);
+  }
+
+  // half-distance line
+  const hy = L/2;
+  if(ui.view!=='front' || hy <= viewRect().y+viewRect().h){
+    line(0, hy, W, hy, COLORS.lineWhite);
+  }
+  // pool edge
+  ctx.strokeStyle='rgba(220,232,240,0.6)'; ctx.lineWidth=Math.max(1.5,0.1*s);
+  ctx.strokeRect(tl.x, tl.y, br.x-tl.x, br.y-tl.y);
+}
+
+function drawArrowHead(ctx, vp, at, dir, size, color){
+  const l = Math.hypot(dir.x,dir.y)||1;
+  const ux=dir.x/l, uy=dir.y/l;
+  const s = size*vp.scale;
+  const p = w2s(vp,at);
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - s*ux + s*0.5*uy, p.y - s*uy - s*0.5*ux);
+  ctx.lineTo(p.x - s*ux - s*0.5*uy, p.y - s*uy + s*0.5*ux);
+  ctx.closePath(); ctx.fill();
+}
+function strokeSmoothPath(ctx, vp, pts){
+  if(pts.length<2) return;
+  const P = pts.map(p=>w2s(vp,p));
+  ctx.beginPath();
+  ctx.moveTo(P[0].x,P[0].y);
+  if(P.length===2){ ctx.lineTo(P[1].x,P[1].y); }
+  else{
+    for(let i=1;i<P.length-1;i++){
+      const mx=(P[i].x+P[i+1].x)/2, my=(P[i].y+P[i+1].y)/2;
+      ctx.quadraticCurveTo(P[i].x,P[i].y,mx,my);
+    }
+    ctx.lineTo(P[P.length-1].x,P[P.length-1].y);
+  }
+  ctx.stroke();
+}
+function drawDrive(ctx, vp, pts, alpha){
+  if(pts.length<2) return;
+  ctx.save(); ctx.globalAlpha = alpha!=null?alpha:1;
+  ctx.strokeStyle=COLORS.drive; ctx.lineWidth=Math.max(2,0.13*vp.scale);
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  strokeSmoothPath(ctx, vp, pts);
+  const a=pts[pts.length-2], b=pts[pts.length-1];
+  drawArrowHead(ctx, vp, b, {x:b.x-a.x,y:b.y-a.y}, 0.55, COLORS.drive);
+  ctx.restore();
+}
+function drawPassArrow(ctx, vp, from, to, alpha){
+  ctx.save(); ctx.globalAlpha = alpha!=null?alpha:1;
+  const c = passCtrl(from,to);
+  const A=w2s(vp,from), C=w2s(vp,c), B=w2s(vp,to);
+  ctx.strokeStyle=COLORS.pass; ctx.lineWidth=Math.max(2,0.12*vp.scale);
+  ctx.setLineDash([0.45*vp.scale, 0.3*vp.scale]);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.quadraticCurveTo(C.x,C.y,B.x,B.y); ctx.stroke();
+  ctx.setLineDash([]);
+  drawArrowHead(ctx, vp, to, {x:to.x-c.x, y:to.y-c.y}, 0.55, COLORS.pass);
+  ctx.restore();
+}
+function drawScreen(ctx, vp, from, to, alpha){
+  ctx.save(); ctx.globalAlpha = alpha!=null?alpha:1;
+  const dx=to.x-from.x, dy=to.y-from.y, l=Math.hypot(dx,dy)||1;
+  const ux=dx/l, uy=dy/l;
+  const end = { x:to.x-ux*0.75, y:to.y-uy*0.75 };   // stop just short of the target
+  const A=w2s(vp,from), B=w2s(vp,end);
+  ctx.strokeStyle=COLORS.screen; ctx.lineWidth=Math.max(2,0.13*vp.scale);
+  ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  const bar=0.55*vp.scale;
+  ctx.beginPath();
+  ctx.moveTo(B.x - uy*bar, B.y + ux*bar);
+  ctx.lineTo(B.x + uy*bar, B.y - ux*bar);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawImpliedMove(ctx, vp, from, to){
+  if(dist(from,to)<0.35) return;
+  ctx.save();
+  ctx.strokeStyle=COLORS.implied; ctx.lineWidth=Math.max(1.5,0.08*vp.scale);
+  ctx.lineCap='round';
+  const A=w2s(vp,from), B=w2s(vp,to);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  drawArrowHead(ctx, vp, to, {x:to.x-from.x,y:to.y-from.y}, 0.4, COLORS.implied);
+  ctx.restore();
+}
+
+function drawPlayer(ctx, vp, p, opts){
+  opts = opts||{};
+  const c = w2s(vp,p);
+  const r = PLAYER_R*vp.scale;
+  ctx.save();
+  ctx.globalAlpha = opts.alpha!=null?opts.alpha:1;
+  const isGK = p.gk;
+  ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+  ctx.fillStyle = isGK ? COLORS.capGK : (p.team==='W'?COLORS.capW:COLORS.capB);
+  ctx.fill();
+  // team ring (also how the two red-capped goalies are told apart)
+  ctx.lineWidth = Math.max(1.5, 0.1*vp.scale);
+  ctx.strokeStyle = isGK ? (p.team==='W'?COLORS.capW:'#7f9cf5') : 'rgba(10,16,22,0.65)';
+  ctx.stroke();
+  ctx.fillStyle = isGK ? '#fff' : (p.team==='W'?COLORS.capWText:COLORS.capBText);
+  ctx.font = `bold ${Math.max(8, 0.55*vp.scale)}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(String(p.cap), c.x, c.y+0.5);
+  if(opts.selected){
+    ctx.setLineDash([4,3]);
+    ctx.strokeStyle=COLORS.sel; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(c.x,c.y,r+0.22*vp.scale,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+function drawBall(ctx, vp, pos, alpha){
+  const c=w2s(vp,pos), r=BALL_R*vp.scale;
+  ctx.save(); ctx.globalAlpha = alpha!=null?alpha:1;
+  ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+  ctx.fillStyle=COLORS.ball; ctx.fill();
+  ctx.strokeStyle=COLORS.ballEdge; ctx.lineWidth=Math.max(1,0.06*vp.scale); ctx.stroke();
+  ctx.beginPath(); ctx.arc(c.x,c.y,r*0.55,-0.6,2.2);
+  ctx.strokeStyle='rgba(122,82,0,0.55)'; ctx.stroke();
+  ctx.restore();
+}
+function drawLabels(ctx, vp, frame, alpha){
+  ctx.save(); ctx.globalAlpha = alpha!=null?alpha:1;
+  ctx.font=`600 ${Math.max(10,0.62*vp.scale)}px sans-serif`;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(const l of frame.labels||[]){
+    const p=w2s(vp,l);
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.8)';
+    ctx.strokeText(l.text,p.x,p.y);
+    ctx.fillStyle='#fff'; ctx.fillText(l.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+/* transition annotations for frame i (arrows drawn from prev positions) */
+function drawTransitionAnnotations(ctx, vp, i, alpha){
+  if(i<1) return;
+  const A=play.frames[i-1], B=play.frames[i];
+  for(const pb of B.players){
+    const pa = playerIn(A,pb.id);
+    if(!pa) continue;
+    const drive=(B.drives||[]).find(d=>d.playerId===pb.id);
+    if(drive && drive.points.length) drawDrive(ctx, vp, [{x:pa.x,y:pa.y},...drive.points], alpha);
+    else drawImpliedMove(ctx, vp, pa, pb);
+  }
+  for(const pass of B.passes||[]){
+    const from = typeof pass.from==='string'
+      ? (playerIn(A,pass.from)||playerIn(B,pass.from)) : pass.from;
+    const to = typeof pass.to==='string'
+      ? (playerIn(B,pass.to)||playerIn(A,pass.to)) : pass.to;
+    if(from && to) drawPassArrow(ctx, vp, {x:from.x,y:from.y}, {x:to.x,y:to.y}, alpha);
+  }
+  for(const s of B.screens||[]){
+    const from=playerIn(B,s.playerId), to=playerIn(B,s.targetId);
+    if(from && to) drawScreen(ctx, vp, from, to, alpha);
+  }
+}
+
+/* full redraw of the editing view */
+function renderEdit(){
+  const vp = mainVp, cw = canvas.clientWidth, ch = canvas.clientHeight;
+  renderPool(cx2d, vp, cw, ch);
+  const i = ui.currentFrame, f = curFrame();
+
+  // ghosts of the previous frame
+  if(i>0){
+    const prev = play.frames[i-1];
+    for(const p of prev.players) drawPlayer(cx2d, vp, p, {alpha:COLORS.ghost});
+  }
+  drawTransitionAnnotations(cx2d, vp, i, 0.95);
+
+  for(const p of f.players)
+    drawPlayer(cx2d, vp, p, {selected: ui.selection && ui.selection.type==='player' && ui.selection.id===p.id});
+  drawLabels(cx2d, vp, f);
+  drawBall(cx2d, vp, ui.drag && ui.drag.type==='ball' ? ui.drag.pos : resolveBallStatic(f));
+
+  drawDraft(cx2d, vp);
+}
+function drawDraft(ctx, vp){
+  const d = ui.draft;
+  if(!d) return;
+  if(d.kind==='drive'){
+    const pts=[d.start, ...d.pts];
+    if(d.hover) pts.push(d.hover);
+    if(pts.length>=2) drawDrive(ctx, vp, pts, 0.85);
+  }else if(d.kind==='pass'){
+    const to = d.hover||d.start;
+    if(dist(d.start,to)>0.2) drawPassArrow(ctx, vp, d.start, to, 0.85);
+  }else if(d.kind==='screen'){
+    const to = d.hover||d.start;
+    if(dist(d.start,to)>0.2) drawScreen(ctx, vp, d.start, to, 0.85);
+  }
+}
+
+/* animation frame rendering (also used by exports, with any ctx/vp) */
+function renderAnimTo(ctx, vp, cw, ch, t, opts){
+  opts=opts||{};
+  renderPool(ctx, vp, cw, ch);
+  const scene = sampleScene(t);
+  if(scene.progress<1 || scene.frameIndex>0)
+    drawTransitionAnnotations(ctx, vp, scene.frameIndex, scene.progress<1 ? 0.32 : 0.0);
+  const f = play.frames[scene.frameIndex];
+  drawLabels(ctx, vp, f, 0.9);
+  for(const p of scene.players) drawPlayer(ctx, vp, p);
+  drawBall(ctx, vp, scene.ballPos);
+  if(opts.title){
+    ctx.save();
+    ctx.font='600 14px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.75)';
+    ctx.strokeText(opts.title, 10, 8);
+    ctx.fillStyle='#fff'; ctx.fillText(opts.title, 10, 8);
+    ctx.restore();
+  }
+}
+function render(){
+  if(!mainVp) fitCanvas();
+  if(ui.animActive) renderAnimTo(cx2d, mainVp, canvas.clientWidth, canvas.clientHeight, ui.time);
+  else renderEdit();
+}
+
+/* ---------------- thumbnails / timeline UI ---------------- */
+const THUMB_H = 84;
+function rebuildTimeline(){
+  const tl = $('timeline');
+  tl.innerHTML='';
+  const vr = viewRect();
+  const tw = Math.round(THUMB_H*vr.w/vr.h);
+  play.frames.forEach((f,i)=>{
+    const div=document.createElement('div');
+    div.className='thumb'+(i===ui.currentFrame?' cur':'');
+    div.dataset.index=i;
+    div.draggable=true;
+    const cn=document.createElement('canvas');
+    cn.width=tw*2; cn.height=THUMB_H*2;
+    cn.style.width=tw+'px'; cn.style.height=THUMB_H+'px';
+    div.appendChild(cn);
+    const cap=document.createElement('div');
+    cap.className='cap';
+    cap.innerHTML=`<span>${i+1}</span><span>${i===0?'start':(f.durationMs/1000).toFixed(1)+'s'}</span>`;
+    div.appendChild(cap);
+    if(play.frames.length>1){
+      const del=document.createElement('button');
+      del.className='del'; del.textContent='✕'; del.title='Delete frame';
+      del.addEventListener('click', e=>{ e.stopPropagation(); deleteFrame(i); });
+      div.appendChild(del);
+    }
+    div.addEventListener('click', ()=> selectFrame(i));
+    div.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.effectAllowed='move'; });
+    div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('dragover'); });
+    div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+    div.addEventListener('drop', e=>{
+      e.preventDefault(); div.classList.remove('dragover');
+      const from=parseInt(e.dataTransfer.getData('text/plain'),10);
+      if(!isNaN(from) && from!==i) reorderFrame(from, i);
+    });
+    tl.appendChild(div);
+    drawThumb(cn, i);
+  });
+  updateScrub();
+  updatePanel();
+}
+function drawThumb(cn, i){
+  const ctx=cn.getContext('2d');
+  const cw=cn.width, ch=cn.height;
+  const vp=makeVp(cw,ch,viewRect());
+  renderPool(ctx, vp, cw, ch);
+  const f=play.frames[i];
+  drawTransitionAnnotations(ctx, vp, i, 0.8);
+  for(const p of f.players) drawPlayer(ctx, vp, p);
+  drawBall(ctx, vp, resolveBallStatic(f));
+}
+function refreshThumbs(){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    const i=parseInt(div.dataset.index,10);
+    if(play.frames[i]) drawThumb(div.querySelector('canvas'), i);
+  });
+}
+function markTimelineCurrent(){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    const i=parseInt(div.dataset.index,10);
+    div.classList.toggle('cur', i===ui.currentFrame && !ui.animActive);
+    div.classList.remove('playing');
+  });
+}
+function markTimelinePlaying(frameIndex){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    div.classList.toggle('playing', parseInt(div.dataset.index,10)===frameIndex);
+  });
+}
+
+/* ---------------- frame ops ---------------- */
+function selectFrame(i){
+  stopPlayback();
+  ui.animActive=false;
+  ui.currentFrame=clamp(i,0,play.frames.length-1);
+  ui.selection=null; ui.draft=null;
+  const {segs}=timelineSegments();
+  const seg=segs.find(s=>s.i===ui.currentFrame);
+  ui.time = seg ? seg.start+seg.dur : 0;
+  commit(false);
+}
+function addFrame(){
+  pushUndo();
+  const f=curFrame();
+  const nf=makeFrame(deep(f.players), deep(f.ball));
+  nf.labels=deep(f.labels||[]);
+  play.frames.splice(ui.currentFrame+1,0,nf);
+  ui.currentFrame++;
+  ui.selection=null; ui.draft=null;
+  commit();
+  toast('Frame added — drag players / draw drives & passes to define what changes');
+}
+function deleteFrame(i){
+  if(play.frames.length<=1){ toast('A play needs at least one frame'); return; }
+  pushUndo();
+  play.frames.splice(i,1);
+  if(ui.currentFrame>=play.frames.length) ui.currentFrame=play.frames.length-1;
+  else if(ui.currentFrame>i) ui.currentFrame--;
+  ui.selection=null; ui.draft=null;
+  commit();
+}
+function reorderFrame(from,to){
+  pushUndo();
+  const [f]=play.frames.splice(from,1);
+  play.frames.splice(to,0,f);
+  ui.currentFrame=to;
+  commit();
+}
+
+/* ---------------- panel ---------------- */
+const HINTS = {
+  select:'Drag players, the ball, or text labels to reposition. Click a player to edit its cap number / team. <kbd>Del</kbd> removes the selection.',
+  addO:'Click the pool to add a white-cap player (added to every frame).',
+  addD:'Click the pool to add a blue-cap player (added to every frame).',
+  ball:'Click a player to give them the ball, or click open water to drop it free.',
+  drive:'Press on a player and drag a swim path — or click the player, then click waypoints and double-click to finish. The player\'s position in this frame moves to the path\'s end. <kbd>Esc</kbd> cancels.',
+  pass:'Drag from the passer to a receiver (or a point in the water) — or click the passer then click the target. The ball travels this path during the transition into this frame.',
+  screen:'Click the screener, then click the player being screened.',
+  label:'Click the pool to place a text note on this frame.',
+  erase:'Click a drive, pass, screen, label, or player to remove it. Removing a player removes them from every frame.',
+};
+function updatePanel(){
+  $('frameTitle').textContent=`Frame ${ui.currentFrame+1} of ${play.frames.length}`;
+  const isFirst=ui.currentFrame===0;
+  $('durInput').disabled=isFirst;
+  $('durInput').value=curFrame().durationMs;
+  $('durRow').style.opacity=isFirst?0.45:1;
+  $('durRow').title=isFirst?'The first frame is the starting position — it has no transition.':'';
+  $('delFrameBtn').disabled=play.frames.length<=1;
+  const sel=ui.selection;
+  if(sel && sel.type==='player'){
+    const p=playerIn(curFrame(),sel.id);
+    if(p){
+      $('selBox').style.display='';
+      $('capInput').value=p.cap;
+      $('teamInput').value=p.team;
+      $('gkInput').checked=!!p.gk;
+    }else $('selBox').style.display='none';
+  }else $('selBox').style.display='none';
+  $('hint').innerHTML=HINTS[ui.tool]||'';
+  $('playName').value=meta().name;
+  updateUndoButtons();
+}
+
+/* ---------------- commit / autosave ---------------- */
+let autosaveTimer=null;
+function commit(save){
+  fitCanvas();
+  render();
+  rebuildTimeline();
+  markTimelineCurrent();
+  if(save!==false){
+    clearTimeout(autosaveTimer);
+    autosaveTimer=setTimeout(()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(play)); }catch(e){} }, 400);
+  }
+}
+function lightRender(){ render(); }
+
+/* ---------------- hit testing ---------------- */
+function hitPlayer(pt, frame){
+  const ps=frame.players;
+  for(let i=ps.length-1;i>=0;i--) if(dist(pt,ps[i])<=PLAYER_R+0.18) return ps[i];
+  return null;
+}
+function hitBall(pt, frame){ return dist(pt, resolveBallStatic(frame))<=BALL_R+0.25; }
+function hitLabel(pt, frame){
+  for(let i=(frame.labels||[]).length-1;i>=0;i--){
+    const l=frame.labels[i];
+    const w=Math.max(1.2, l.text.length*0.36);
+    if(pt.x>=l.x-0.3 && pt.x<=l.x+w && Math.abs(pt.y-l.y)<=0.55) return l;
+  }
+  return null;
+}
+function hitAnnotation(pt){
+  const i=ui.currentFrame;
+  if(i<1) return null;
+  const A=play.frames[i-1], B=play.frames[i];
+  const tol=0.45;
+  for(let k=(B.drives||[]).length-1;k>=0;k--){
+    const d=B.drives[k], pa=playerIn(A,d.playerId);
+    const pts=pa?[{x:pa.x,y:pa.y},...d.points]:d.points;
+    if(pts.length>1 && pointPathDist(pt,pts)<tol) return {kind:'drive', index:k};
+  }
+  for(let k=(B.passes||[]).length-1;k>=0;k--){
+    const pass=B.passes[k];
+    const from=endpointStatic(pass.from, A)||endpointStatic(pass.from, B);
+    const to=endpointStatic(pass.to, B)||endpointStatic(pass.to, A);
+    if(from&&to){
+      const c=passCtrl(from,to), samples=[];
+      for(let t=0;t<=1.001;t+=0.1) samples.push(qBez(from,c,to,t));
+      if(pointPathDist(pt,samples)<tol) return {kind:'pass', index:k};
+    }
+  }
+  for(let k=(B.screens||[]).length-1;k>=0;k--){
+    const s=B.screens[k], from=playerIn(B,s.playerId), to=playerIn(B,s.targetId);
+    if(from&&to&&pointSegDist(pt,from,to)<tol) return {kind:'screen', index:k};
+  }
+  return null;
+}
+
+/* ---------------- pointer interaction ---------------- */
+function evtWorld(e){
+  const r=canvas.getBoundingClientRect();
+  return s2w(mainVp,{x:e.clientX-r.left, y:e.clientY-r.top});
+}
+function maybeSnap(pt){
+  if(!ui.snap) return pt;
+  return {x:Math.round(pt.x*2)/2, y:Math.round(pt.y*2)/2};
+}
+function requireTransitionFrame(){
+  if(ui.currentFrame===0){
+    toast('This is the starting frame — click “＋ Add Frame”, then draw the movement into the new frame.');
+    return false;
+  }
+  return true;
+}
+function ensureEditMode(){
+  if(ui.animActive){
+    ui.animActive=false;
+    stopPlayback();
+    const scene=sampleScene(ui.time);
+    ui.currentFrame=scene.frameIndex;
+    commit(false);
+    return true;
+  }
+  return false;
+}
+
+let pDown=null;   // {world, client, moved}
+canvas.addEventListener('pointerdown', e=>{
+  if(e.button!==0) return;
+  canvas.setPointerCapture(e.pointerId);
+  if(ensureEditMode()) return;      // first click after scrubbing just re-enters edit mode
+  const pt=evtWorld(e);
+  pDown={world:pt, client:{x:e.clientX,y:e.clientY}, moved:false};
+  const f=curFrame();
+
+  if(ui.tool==='select'){
+    if(hitBall(pt,f)){ pushUndo(); ui.drag={type:'ball', pos:resolveBallStatic(f)}; return; }
+    const pl=hitPlayer(pt,f);
+    if(pl){ ui.selection={type:'player', id:pl.id}; pushUndo(); ui.drag={type:'player', id:pl.id}; updatePanel(); lightRender(); return; }
+    const lb=hitLabel(pt,f);
+    if(lb){ pushUndo(); ui.drag={type:'label', label:lb}; return; }
+    ui.selection=null; updatePanel(); lightRender();
+  }
+  else if(ui.tool==='drive'){
+    if(ui.draft && ui.draft.kind==='drive') return;   // waypoint clicks handled on pointerup
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayer(pt,f);
+    if(pl) ui.draft={kind:'drive', playerId:pl.id, start:{x:pl.x,y:pl.y}, pts:[], mode:'pending', hover:null};
+    else toast('Start a drive on a player');
+  }
+  else if(ui.tool==='pass'){
+    if(ui.draft && ui.draft.kind==='pass') return;
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayer(pt,f);
+    ui.draft={kind:'pass', from: pl?pl.id:{x:pt.x,y:pt.y},
+              start: pl?{x:pl.x,y:pl.y}:pt, mode:'pending', hover:null};
+  }
+  else if(ui.tool==='screen'){
+    if(ui.draft && ui.draft.kind==='screen') return;
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayer(pt,f);
+    if(pl) ui.draft={kind:'screen', playerId:pl.id, start:{x:pl.x,y:pl.y}, mode:'pending', hover:null};
+    else toast('Start a screen on the screening player');
+  }
+});
+
+canvas.addEventListener('pointermove', e=>{
+  if(!mainVp) return;
+  const pt=evtWorld(e);
+  if(pDown && Math.hypot(e.clientX-pDown.client.x, e.clientY-pDown.client.y)>7) pDown.moved=true;
+
+  if(ui.drag){
+    const f=curFrame();
+    const sp=maybeSnap(pt);
+    if(ui.drag.type==='player'){
+      const pl=playerIn(f,ui.drag.id);
+      if(pl){
+        pl.x=sp.x; pl.y=sp.y;
+        const drive=(f.drives||[]).find(d=>d.playerId===pl.id);
+        if(drive && drive.points.length) drive.points[drive.points.length-1]={x:sp.x,y:sp.y};
+      }
+    }else if(ui.drag.type==='ball'){
+      ui.drag.pos={x:pt.x,y:pt.y};
+    }else if(ui.drag.type==='label'){
+      ui.drag.label.x=sp.x; ui.drag.label.y=sp.y;
+    }
+    lightRender();
+    return;
+  }
+  const d=ui.draft;
+  if(d){
+    if(d.kind==='drive'){
+      if(d.mode==='pending' && pDown && pDown.moved) d.mode='freehand';
+      if(d.mode==='freehand'){
+        const last=d.pts.length?d.pts[d.pts.length-1]:d.start;
+        if(dist(last,pt)>0.25) d.pts.push({x:pt.x,y:pt.y});
+        d.hover=null;
+      }else d.hover=maybeSnap(pt);
+    }else{
+      if(d.mode==='pending' && pDown && pDown.moved) d.mode='dragging';
+      d.hover=pt;
+    }
+    lightRender();
+  }
+});
+
+canvas.addEventListener('pointerup', e=>{
+  if(e.button!==0) return;
+  const pt=evtWorld(e);
+  const wasDown=pDown; pDown=null;
+  const f=curFrame();
+
+  if(ui.drag){
+    if(ui.drag.type==='ball'){
+      const pl=hitPlayer(pt,f);
+      f.ball = pl ? {holderId:pl.id} : {x:maybeSnap(pt).x, y:maybeSnap(pt).y};
+    }
+    ui.drag=null;
+    commit();
+    return;
+  }
+
+  const d=ui.draft;
+  if(d){
+    if(d.kind==='drive'){
+      if(d.mode==='freehand'){
+        const pts=rdp([d.start,...d.pts,{x:pt.x,y:pt.y}],0.12).slice(1);
+        if(pts.length && pathLen([d.start,...pts])>0.6) commitDrive(d.playerId,pts);
+        ui.draft=null; commit(false); render();
+      }else if(d.mode==='pending'){
+        d.mode='click';   // click-to-add-waypoints mode
+      }else if(d.mode==='click'){
+        d.pts.push(maybeSnap(pt));
+        lightRender();
+      }
+    }else if(d.kind==='pass'){
+      if(d.mode==='dragging'){
+        finishPass(d,pt);
+      }else if(d.mode==='pending'){
+        d.mode='click';
+      }else if(d.mode==='click'){
+        finishPass(d,pt);
+      }
+    }else if(d.kind==='screen'){
+      if(d.mode==='dragging' || d.mode==='click'){
+        const target=hitPlayer(pt,f);
+        if(target && target.id!==d.playerId){
+          pushUndo();
+          f.screens.push({playerId:d.playerId, targetId:target.id});
+          ui.draft=null; commit();
+        }else if(d.mode==='dragging'){ ui.draft=null; toast('End the screen on a player'); render(); }
+      }else if(d.mode==='pending'){
+        d.mode='click';
+      }
+    }
+    return;
+  }
+
+  if(!wasDown) return;
+
+  // simple click tools
+  if(ui.tool==='addO' || ui.tool==='addD'){
+    const sp=maybeSnap(pt);
+    addPlayer(ui.tool==='addO'?'W':'B', sp);
+  }
+  else if(ui.tool==='ball'){
+    pushUndo();
+    const pl=hitPlayer(pt,f);
+    f.ball = pl ? {holderId:pl.id} : {x:maybeSnap(pt).x, y:maybeSnap(pt).y};
+    commit();
+  }
+  else if(ui.tool==='label'){
+    const text=prompt('Label text:');
+    if(text && text.trim()){
+      pushUndo();
+      f.labels=f.labels||[];
+      f.labels.push({x:maybeSnap(pt).x, y:maybeSnap(pt).y, text:text.trim()});
+      commit();
+    }
+  }
+  else if(ui.tool==='erase'){
+    eraseAt(pt);
+  }
+});
+
+canvas.addEventListener('dblclick', e=>{
+  const pt=evtWorld(e);
+  const d=ui.draft;
+  if(d && d.kind==='drive' && d.mode==='click'){
+    // the two clicks of the dblclick each pushed a waypoint — drop one
+    if(d.pts.length>1 && dist(d.pts[d.pts.length-1], d.pts[d.pts.length-2])<0.3) d.pts.pop();
+    if(d.pts.length && pathLen([d.start,...d.pts])>0.4) commitDrive(d.playerId,d.pts);
+    ui.draft=null; commit(false); render();
+    return;
+  }
+  if(ui.tool==='select'){
+    const pl=hitPlayer(pt,curFrame());
+    if(pl){
+      const v=prompt('Cap number for this player:', pl.cap);
+      const n=parseInt(v,10);
+      if(!isNaN(n)&&n>0){ pushUndo(); setPlayerProp(pl.id,'cap',n); commit(); }
+    }
+  }
+});
+
+function commitDrive(playerId, pts){
+  pushUndo();
+  const f=curFrame();
+  f.drives=(f.drives||[]).filter(d=>d.playerId!==playerId);
+  const end=maybeSnap(pts[pts.length-1]);
+  pts[pts.length-1]=end;
+  f.drives.push({playerId, points:pts});
+  const pl=playerIn(f,playerId);
+  if(pl){ pl.x=end.x; pl.y=end.y; }
+  commit();
+}
+function finishPass(d, pt){
+  const f=curFrame();
+  const target=hitPlayer(pt,f);
+  const to = target ? target.id : {x:maybeSnap(pt).x, y:maybeSnap(pt).y};
+  const from = d.from;
+  if(typeof from==='string' && from===to){ ui.draft=null; render(); return; }
+  pushUndo();
+  f.passes.push({from, to});
+  f.ball = target ? {holderId:target.id} : {x:to.x, y:to.y};
+  ui.draft=null; commit();
+}
+function eraseAt(pt){
+  const f=curFrame();
+  const ann=hitAnnotation(pt);
+  if(ann){
+    pushUndo();
+    if(ann.kind==='drive') f.drives.splice(ann.index,1);
+    else if(ann.kind==='pass') f.passes.splice(ann.index,1);
+    else f.screens.splice(ann.index,1);
+    commit(); return;
+  }
+  const lb=hitLabel(pt,f);
+  if(lb){ pushUndo(); f.labels.splice(f.labels.indexOf(lb),1); commit(); return; }
+  const pl=hitPlayer(pt,f);
+  if(pl){ removePlayer(pl.id); return; }
+  toast('Nothing to erase there');
+}
+
+/* ---------------- player ops (apply across all frames) ---------------- */
+function nextCap(team){
+  let m=0;
+  for(const p of curFrame().players) if(p.team===team && !p.gk) m=Math.max(m,p.cap);
+  return m+1;
+}
+function addPlayer(team, pos){
+  pushUndo();
+  const p={id:uid('p'), team, gk:false, cap:nextCap(team), x:pos.x, y:pos.y};
+  for(const f of play.frames) f.players.push(deep(p));
+  ui.selection={type:'player', id:p.id};
+  commit();
+}
+function removePlayer(id){
+  pushUndo();
+  for(const f of play.frames){
+    const pl=playerIn(f,id);
+    f.players=f.players.filter(p=>p.id!==id);
+    f.drives=(f.drives||[]).filter(d=>d.playerId!==id);
+    f.screens=(f.screens||[]).filter(s=>s.playerId!==id && s.targetId!==id);
+    f.passes=(f.passes||[]).filter(ps=>ps.from!==id && ps.to!==id);
+    if(f.ball && f.ball.holderId===id) f.ball = pl?{x:pl.x,y:pl.y}:{x:meta().poolWidthM/2,y:8};
+  }
+  if(ui.selection && ui.selection.type==='player' && ui.selection.id===id) ui.selection=null;
+  commit();
+}
+function setPlayerProp(id, prop, val){
+  for(const f of play.frames){
+    const p=playerIn(f,id);
+    if(p) p[prop]=val;
+  }
+}
+
+/* ---------------- playback ---------------- */
+let rafId=null, lastTs=null, holdUntil=0;
+function totalDuration(){ return timelineSegments().total; }
+function startPlayback(){
+  if(play.frames.length<2){ toast('Add a second frame to animate the play'); return; }
+  ui.playing=true; ui.animActive=true; ui.draft=null;
+  if(ui.time>=totalDuration()) ui.time=0;
+  $('playBtn').textContent='⏸ Pause';
+  lastTs=null; holdUntil=0;
+  rafId=requestAnimationFrame(tick);
+}
+function stopPlayback(){
+  ui.playing=false;
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  $('playBtn').textContent='▶ Play';
+}
+function tick(ts){
+  if(!ui.playing) return;
+  if(lastTs==null) lastTs=ts;
+  const dt=(ts-lastTs)*ui.speed; lastTs=ts;
+  const total=totalDuration();
+  if(holdUntil){
+    if(ts>=holdUntil){ holdUntil=0; ui.time=0; }
+  }else{
+    ui.time+=dt;
+    if(ui.time>=total){
+      ui.time=total;
+      if(ui.loop) holdUntil=ts+END_HOLD_MS/ui.speed;
+      else{
+        stopPlayback();
+        render(); updateScrub();
+        return;
+      }
+    }
+  }
+  render();
+  updateScrub();
+  const scene=sampleScene(ui.time);
+  markTimelinePlaying(scene.frameIndex);
+  rafId=requestAnimationFrame(tick);
+}
+function updateScrub(){
+  const total=Math.max(1,totalDuration());
+  const sc=$('scrub');
+  sc.max=total;
+  sc.value=clamp(ui.time,0,total);
+  $('timeStr').textContent=`${(clamp(ui.time,0,total)/1000).toFixed(1)} / ${(total/1000).toFixed(1)} s`;
+}
+
+$('playBtn').addEventListener('click', ()=>{ ui.playing?stopPlayback():startPlayback(); if(!ui.playing) render(); });
+$('scrub').addEventListener('input', e=>{
+  ui.time=parseFloat(e.target.value);
+  ui.animActive=true;
+  render(); updateScrub();
+  markTimelinePlaying(sampleScene(ui.time).frameIndex);
+});
+$('loopToggle').addEventListener('change', e=> ui.loop=e.target.checked);
+$('speedSel').addEventListener('change', e=> ui.speed=parseFloat(e.target.value));
+
+/* ---------------- toolbar / header wiring ---------------- */
+document.querySelectorAll('#toolbar button[data-tool]').forEach(btn=>{
+  btn.addEventListener('click', ()=> setTool(btn.dataset.tool));
+});
+function setTool(t){
+  ui.tool=t; ui.draft=null;
+  ensureEditMode();
+  document.querySelectorAll('#toolbar button[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+  canvas.style.cursor = t==='select'?'default':'crosshair';
+  updatePanel(); render();
+}
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+$('preset66').addEventListener('click', ()=>applyPreset('66'));
+$('preset42').addEventListener('click', ()=>applyPreset('42'));
+$('presetClear').addEventListener('click', ()=>applyPreset('clear'));
+$('playName').addEventListener('change', e=>{ pushUndo(); meta().name=e.target.value; commit(); });
+$('poolLen').addEventListener('change', e=>{
+  pushUndo();
+  const newL=parseInt(e.target.value,10), oldL=meta().poolLengthM;
+  if(newL===oldL) return;
+  const delta=newL-oldL, half=oldL/2;
+  const shiftPt=p=>{ if(p.y>half) p.y+=delta; };
+  for(const f of play.frames){
+    f.players.forEach(shiftPt);
+    (f.drives||[]).forEach(d=>d.points.forEach(shiftPt));
+    (f.passes||[]).forEach(ps=>{ if(typeof ps.from==='object') shiftPt(ps.from); if(typeof ps.to==='object') shiftPt(ps.to); });
+    (f.labels||[]).forEach(shiftPt);
+    if(f.ball && f.ball.x!=null) shiftPt(f.ball);
+  }
+  meta().poolLengthM=newL;
+  commit();
+});
+$('lineRule').addEventListener('change', e=>{ pushUndo(); meta().sixMeterLine = e.target.value==='6'; commit(); });
+$('frontToggle').addEventListener('change', e=>{ ui.view=e.target.checked?'front':'full'; commit(false); });
+$('snapToggle').addEventListener('change', e=>{ ui.snap=e.target.checked; render(); });
+$('durInput').addEventListener('change', e=>{
+  const v=clamp(parseInt(e.target.value,10)||1000,100,20000);
+  pushUndo(); curFrame().durationMs=v; commit();
+});
+$('addFrameBtn').addEventListener('click', addFrame);
+$('addFramePanelBtn').addEventListener('click', addFrame);
+$('delFrameBtn').addEventListener('click', ()=>deleteFrame(ui.currentFrame));
+$('capInput').addEventListener('change', e=>{
+  if(!ui.selection) return;
+  const n=parseInt(e.target.value,10);
+  if(!isNaN(n)&&n>0){ pushUndo(); setPlayerProp(ui.selection.id,'cap',n); commit(); }
+});
+$('teamInput').addEventListener('change', e=>{
+  if(!ui.selection) return;
+  pushUndo(); setPlayerProp(ui.selection.id,'team',e.target.value); commit();
+});
+$('gkInput').addEventListener('change', e=>{
+  if(!ui.selection) return;
+  pushUndo(); setPlayerProp(ui.selection.id,'gk',e.target.checked); commit();
+});
+$('removePlayerBtn').addEventListener('click', ()=>{ if(ui.selection) removePlayer(ui.selection.id); });
+
+/* ---------------- keyboard ---------------- */
+window.addEventListener('keydown', e=>{
+  const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName || '');
+  if((e.ctrlKey||e.metaKey) && !inField){
+    if(e.key==='z'||e.key==='Z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+    if(e.key==='y'||e.key==='Y'){ e.preventDefault(); redo(); return; }
+  }
+  if(inField) return;
+  if(e.key==='Escape'){
+    if(ui.draft){ ui.draft=null; render(); }
+    else if(ui.selection){ ui.selection=null; updatePanel(); render(); }
+    return;
+  }
+  if(e.key===' '){ e.preventDefault(); ui.playing?stopPlayback():startPlayback(); if(!ui.playing) render(); return; }
+  if(e.key==='Enter' && ui.draft && ui.draft.kind==='drive' && ui.draft.mode==='click'){
+    const d=ui.draft;
+    if(d.pts.length && pathLen([d.start,...d.pts])>0.4) commitDrive(d.playerId,d.pts);
+    ui.draft=null; render(); return;
+  }
+  if((e.key==='Delete'||e.key==='Backspace') && ui.selection && ui.selection.type==='player'){
+    e.preventDefault(); removePlayer(ui.selection.id); return;
+  }
+  const keyTool={v:'select',b:'ball',d:'drive',p:'pass',s:'screen',e:'erase',t:'label'}[e.key.toLowerCase()];
+  if(keyTool && !e.ctrlKey && !e.metaKey && !e.altKey) setTool(keyTool);
+});
+
+/* ---------------- save / load ---------------- */
+function download(blob, filename){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+function safeName(){ return (meta().name||'play').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')||'play'; }
+$('saveBtn').addEventListener('click', ()=>{
+  download(new Blob([JSON.stringify(play,null,2)],{type:'application/json'}), safeName()+'.json');
+});
+$('loadBtn').addEventListener('click', ()=> $('loadFile').click());
+$('loadFile').addEventListener('change', e=>{
+  const file=e.target.files[0];
+  e.target.value='';
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.frames) || !data.frames.length || !data.meta) throw new Error('bad shape');
+      pushUndo();
+      play=normalizePlay(data);
+      ui.currentFrame=0; ui.selection=null; stopPlayback(); ui.animActive=false;
+      syncHeaderControls();
+      commit();
+      toast('Play loaded');
+    }catch(err){ toast('Could not load: not a valid play file'); }
+  };
+  reader.readAsText(file);
+});
+function normalizePlay(data){
+  const p={ meta:{ name:'Play', poolLengthM:25, poolWidthM:20, sixMeterLine:true, fps:30, ...data.meta },
+            frames: data.frames.map(f=>({
+              id:f.id||uid('f'),
+              durationMs:Math.max(100, f.durationMs||1200),
+              players:(f.players||[]).map(pl=>({id:pl.id||uid('p'), team:pl.team==='B'?'B':'W', gk:!!pl.gk, cap:pl.cap||1, x:+pl.x||0, y:+pl.y||0})),
+              ball: f.ball && f.ball.holderId ? {holderId:f.ball.holderId} : {x:(f.ball&&+f.ball.x)||10, y:(f.ball&&+f.ball.y)||8},
+              drives:(f.drives||[]).filter(d=>d.playerId&&Array.isArray(d.points)),
+              passes:(f.passes||[]).filter(ps=>ps.from!=null&&ps.to!=null),
+              screens:(f.screens||[]).filter(s=>s.playerId&&s.targetId),
+              labels:(f.labels||[]).filter(l=>l.text!=null),
+            })) };
+  // keep the id counter ahead of any loaded ids
+  const nums=JSON.stringify(p).match(/"[fp](\d+)"/g)||[];
+  for(const m of nums){ const n=parseInt(m.replace(/\D/g,''),10); if(n>=idCounter) idCounter=n+1; }
+  return p;
+}
+function syncHeaderControls(){
+  $('poolLen').value=String(meta().poolLengthM===30?30:25);
+  $('lineRule').value=meta().sixMeterLine?'6':'5';
+  $('playName').value=meta().name;
+}
+
+/* ---------------- export ---------------- */
+let exportKind='gif', exportCancelled=false;
+$('gifBtn').addEventListener('click', ()=>openExport('gif'));
+$('vidBtn').addEventListener('click', ()=>openExport('video'));
+function openExport(kind){
+  if(play.frames.length<2){ toast('Add at least two frames before exporting an animation'); return; }
+  stopPlayback();
+  exportKind=kind;
+  $('exportTitle').textContent = kind==='gif'?'Export animated GIF':'Export WebM video';
+  $('expLoopRow').style.display = kind==='gif'?'none':'flex';
+  $('expFps').value = kind==='gif'?'15':'30';
+  $('exportModal').classList.add('show');
+}
+$('expCancel').addEventListener('click', ()=> $('exportModal').classList.remove('show'));
+$('expStart').addEventListener('click', ()=>{
+  $('exportModal').classList.remove('show');
+  const width=parseInt($('expWidth').value,10);
+  const fps=parseInt($('expFps').value,10);
+  const loops=parseInt($('expLoops').value,10);
+  if(exportKind==='gif') exportGIF(width,fps).catch(err=>{ closeProgress(); toast('GIF export failed: '+err.message); });
+  else exportVideo(width,fps,loops).catch(err=>{ closeProgress(); toast('Video export failed: '+err.message); });
+});
+$('progCancel').addEventListener('click', ()=>{ exportCancelled=true; });
+function showProgress(title){
+  exportCancelled=false;
+  $('progTitle').textContent=title;
+  $('progBar').style.width='0%';
+  $('progText').textContent='Starting…';
+  $('progModal').classList.add('show');
+}
+function setProgress(frac,text){
+  $('progBar').style.width=(clamp(frac,0,1)*100).toFixed(1)+'%';
+  if(text) $('progText').textContent=text;
+}
+function closeProgress(){ $('progModal').classList.remove('show'); }
+const tickAsync=()=>new Promise(r=>setTimeout(r,0));
+
+function exportCanvas(width){
+  const vr=viewRect();
+  const height=Math.round(width*vr.h/vr.w/2)*2;
+  const cnv=document.createElement('canvas');
+  cnv.width=width; cnv.height=height;
+  return {cnv, ctx:cnv.getContext('2d'), vp:makeVp(width,height,vr), width, height};
+}
+
+/* --- GIF export.
+   Primary path: gif.js loaded on demand from a CDN (fast, worker-based).
+   Fallback: a small built-in GIF89a encoder (per-frame local palette + LZW),
+   so export still works offline or when the CDN is unreachable. --- */
+let gifLibReady=null, gifWorkerUrl=null;
+const GIF_CDN='https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js';
+const GIF_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js';
+function ensureGifLib(){
+  if(gifLibReady) return gifLibReady;
+  gifLibReady=(async()=>{
+    if(typeof GIF==='undefined'){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src=GIF_CDN;
+        s.onload=res;
+        s.onerror=()=>rej(new Error('could not load gif.js from CDN'));
+        document.head.appendChild(s);
+      });
+    }
+    if(!gifWorkerUrl){
+      const resp=await fetch(GIF_WORKER_CDN);
+      if(!resp.ok) throw new Error('could not fetch gif.js worker');
+      gifWorkerUrl=URL.createObjectURL(new Blob([await resp.text()],{type:'application/javascript'}));
+    }
+  })();
+  gifLibReady.catch(()=>{ gifLibReady=null; });
+  return gifLibReady;
+}
+
+/* Built-in GIF89a encoder */
+class ByteBuf{
+  constructor(){ this.a=new Uint8Array(1<<16); this.n=0; }
+  grow(need){ while(this.a.length<this.n+need){ const b=new Uint8Array(this.a.length*2); b.set(this.a); this.a=b; } }
+  push(...bytes){ this.grow(bytes.length); for(const b of bytes) this.a[this.n++]=b; }
+  bytes(arr){ this.grow(arr.length); this.a.set(arr,this.n); this.n+=arr.length; }
+  u16(v){ this.push(v&0xff, (v>>8)&0xff); }
+  result(){ return this.a.subarray(0,this.n); }
+}
+class GifWriter{
+  constructor(w,h){
+    this.w=w; this.h=h;
+    this.out=new ByteBuf();
+    const o=this.out;
+    o.push(0x47,0x49,0x46,0x38,0x39,0x61);          // "GIF89a"
+    o.u16(w); o.u16(h);
+    o.push(0x70,0,0);                                // no global color table
+    // NETSCAPE looping extension (loop forever)
+    o.push(0x21,0xFF,0x0B);
+    for(const c of 'NETSCAPE2.0') o.push(c.charCodeAt(0));
+    o.push(3,1,0,0,0);
+  }
+  addFrame(imageData, delayCs){
+    const {data}=imageData, w=this.w, h=this.h, n=w*h;
+    // quantize to 15-bit buckets and count
+    const counts=new Uint32Array(32768);
+    const keys=new Uint16Array(n);
+    for(let i=0,j=0;i<n;i++,j+=4){
+      const key=((data[j]&0xF8)<<7)|((data[j+1]&0xF8)<<2)|(data[j+2]>>3);
+      keys[i]=key; counts[key]++;
+    }
+    const used=[];
+    for(let k=0;k<32768;k++) if(counts[k]) used.push(k);
+    used.sort((a,b)=>counts[b]-counts[a]);
+    const palN=Math.min(256,used.length);
+    const pal=new Uint8Array(256*3);
+    const bucketIdx=new Int16Array(32768).fill(-1);
+    for(let i=0;i<palN;i++){
+      const k=used[i];
+      pal[i*3]=((k>>10)&31)<<3|4; pal[i*3+1]=((k>>5)&31)<<3|4; pal[i*3+2]=(k&31)<<3|4;
+      bucketIdx[k]=i;
+    }
+    // map leftover buckets to the nearest palette color
+    for(let u=palN;u<used.length;u++){
+      const k=used[u];
+      const r=((k>>10)&31)<<3|4, g=((k>>5)&31)<<3|4, b=(k&31)<<3|4;
+      let best=0, bestD=Infinity;
+      for(let i=0;i<palN;i++){
+        const dr=r-pal[i*3], dg=g-pal[i*3+1], db=b-pal[i*3+2];
+        const d=dr*dr+dg*dg+db*db;
+        if(d<bestD){ bestD=d; best=i; }
+      }
+      bucketIdx[k]=best;
+    }
+    const indices=new Uint8Array(n);
+    for(let i=0;i<n;i++) indices[i]=bucketIdx[keys[i]];
+
+    const o=this.out;
+    o.push(0x21,0xF9,0x04,0x04); o.u16(Math.max(2,delayCs)); o.push(0,0);   // GCE: keep-disposal, no transparency
+    o.push(0x2C); o.u16(0); o.u16(0); o.u16(this.w); o.u16(this.h);
+    o.push(0x87);                                     // local color table, 256 entries
+    o.bytes(pal);
+    this.lzw(indices);
+  }
+  lzw(indices){
+    const o=this.out, minCode=8;
+    o.push(minCode);
+    const clear=1<<minCode, eoi=clear+1;
+    let codeSize=minCode+1, next=eoi+1;
+    let dict=new Map();
+    let cur=0, curBits=0;
+    const block=new Uint8Array(255); let blockLen=0;
+    const flushBlock=()=>{ if(blockLen){ o.push(blockLen); o.bytes(block.subarray(0,blockLen)); blockLen=0; } };
+    const emit=code=>{
+      cur|=code<<curBits; curBits+=codeSize;
+      while(curBits>=8){ block[blockLen++]=cur&0xff; cur>>>=8; curBits-=8; if(blockLen===255) flushBlock(); }
+    };
+    emit(clear);
+    let prefix=indices[0];
+    for(let i=1;i<indices.length;i++){
+      const k=indices[i], key=(prefix<<8)|k;
+      const found=dict.get(key);
+      if(found!==undefined){ prefix=found; continue; }
+      emit(prefix);
+      if(next===4096){
+        emit(clear); next=eoi+1; codeSize=minCode+1; dict=new Map();
+      }else{
+        if(next>=(1<<codeSize)) codeSize++;
+        dict.set(key,next++);
+      }
+      prefix=k;
+    }
+    emit(prefix); emit(eoi);
+    while(curBits>0){ block[blockLen++]=cur&0xff; cur>>>=8; curBits-=8; if(blockLen===255) flushBlock(); }
+    flushBlock();
+    o.push(0);
+  }
+  finish(){ this.out.push(0x3B); return this.out.result(); }
+}
+
+async function exportGIF(width,fps){
+  showProgress('Exporting GIF…');
+  setProgress(0,'Loading encoder…');
+  let useLib=true;
+  try{ await ensureGifLib(); }catch(e){ useLib=false; }
+  const {cnv,ctx,vp,height}=exportCanvas(width);
+  const step=1000/fps;
+  const nFrames=Math.max(2,Math.ceil((totalDuration()+END_HOLD_MS)/step));
+  const title=meta().name;
+  // integer-centisecond delays that accumulate to the true duration
+  const delayCs=k=>Math.round((k+1)*step/10)-Math.round(k*step/10);
+
+  const gif=useLib ? new GIF({workers:2, quality:8, width, height, workerScript:gifWorkerUrl, repeat:0})
+                   : new GifWriter(width,height);
+  for(let k=0;k<nFrames;k++){
+    if(exportCancelled){ closeProgress(); toast('Export cancelled'); return; }
+    renderAnimTo(ctx, vp, width, height, Math.min(k*step, totalDuration()), {title});
+    if(useLib) gif.addFrame(ctx,{copy:true, delay:delayCs(k)*10});
+    else gif.addFrame(ctx.getImageData(0,0,width,height), delayCs(k));
+    const capShare=useLib?0.5:0.95;
+    if(k%3===0){ setProgress(capShare*k/nFrames, `Rendering frame ${k+1} / ${nFrames}`); await tickAsync(); }
+  }
+  if(useLib){
+    setProgress(0.5,'Encoding GIF…');
+    await new Promise((res,rej)=>{
+      gif.on('progress', f=>{
+        if(exportCancelled){ try{gif.abort();}catch(e){} rej(new Error('cancelled')); return; }
+        setProgress(0.5+f*0.5, `Encoding… ${(f*100).toFixed(0)}%`);
+      });
+      gif.on('finished', blob=>{ download(blob, safeName()+'.gif'); res(); });
+      gif.render();
+    }).catch(err=>{ if(err.message!=='cancelled') throw err; toast('Export cancelled'); });
+  }else{
+    setProgress(0.97,'Finalizing…'); await tickAsync();
+    download(new Blob([gif.finish()],{type:'image/gif'}), safeName()+'.gif');
+  }
+  closeProgress();
+}
+
+/* --- WebM video via captureStream + MediaRecorder --- */
+async function exportVideo(width,fps,loops){
+  const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+    .find(m=>window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+  if(!mime) throw new Error('MediaRecorder / WebM not supported in this browser');
+  showProgress('Recording video…');
+  const {cnv,ctx,vp,height}=exportCanvas(width);
+  const cycle=totalDuration()+END_HOLD_MS;
+  const durTotal=cycle*loops;
+  const title=meta().name;
+  renderAnimTo(ctx, vp, width, height, 0, {title});
+  const stream=cnv.captureStream(fps);
+  const rec=new MediaRecorder(stream,{mimeType:mime, videoBitsPerSecond:8_000_000});
+  const chunks=[];
+  rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  const stopped=new Promise(res=>{ rec.onstop=res; });
+  rec.start(250);
+  await new Promise(res=>{
+    const t0=performance.now();
+    function frame(now){
+      const t=now-t0;
+      if(exportCancelled || t>=durTotal){ res(); return; }
+      renderAnimTo(ctx, vp, width, height, Math.min(t%cycle, totalDuration()), {title});
+      setProgress(t/durTotal, `Recording… ${(t/1000).toFixed(1)} / ${(durTotal/1000).toFixed(1)} s`);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+  rec.stop();
+  await stopped;
+  closeProgress();
+  if(exportCancelled){ toast('Export cancelled'); return; }
+  if(!chunks.length) throw new Error('no video data produced');
+  download(new Blob(chunks,{type:'video/webm'}), safeName()+'.webm');
+}
+
+/* ---------------- toast ---------------- */
+let toastTimer=null;
+function toast(msg){
+  const t=$('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'), 3200);
+}
+
+/* ---------------- boot ---------------- */
+window.addEventListener('resize', ()=>{ fitCanvas(); render(); });
+(function boot(){
+  newPlay();
+  let restored=false;
+  try{
+    const saved=localStorage.getItem(LS_KEY);
+    if(saved){
+      const data=JSON.parse(saved);
+      if(data && Array.isArray(data.frames) && data.frames.length){
+        play=normalizePlay(data);
+        restored=true;
+      }
+    }
+  }catch(e){}
+  if(!restored){
+    // first run: start from the standard 6-on-6 set
+    const cx=play.meta.poolWidthM/2;
+    const off=[
+      {x:cx,y:7.2},{x:cx-3.6,y:5.2},{x:cx+3.6,y:5.2},
+      {x:cx-6.5,y:1.6},{x:cx+6.5,y:1.6},{x:cx,y:2.6},
+    ];
+    play.frames=[ makeFrame(buildPreset(off), {holderId:'o1'}) ];
+  }
+  syncHeaderControls();
+  setTool('select');
+  commit(false);
+  if(restored) toast('Restored your last play from this browser — use the presets to start fresh');
+  // debug / test hook
+  window._wp={ get play(){return play;}, get ui(){return ui;}, sampleScene, timelineSegments,
+               selectFrame, addFrame, applyPreset, w2s:(p)=>w2s(mainVp,p), s2w:(p)=>s2w(mainVp,p),
+               get vp(){return mainVp;}, canvas };
+})();
+</script>
+</body>
+</html>
