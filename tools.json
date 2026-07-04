@@ -43,5 +43,10 @@
     "id": "water-polo-play-designer",
     "name": "Water Polo Play Designer",
     "description": "Sketch and animate water polo set plays frame-by-frame — lay out 6-on-6, draw drives and passes, tween playback, and export looping GIFs or WebM video"
+  },
+  {
+    "id": "water-polo-play-designer-3d",
+    "name": "Water Polo Play Designer 3D",
+    "description": "Sketch and animate water polo set plays in a 3D pool with a free-moving camera — orbit, pan and zoom, draw drives and passes, tween playback, and export looping GIFs or WebM video"
   }
 ]

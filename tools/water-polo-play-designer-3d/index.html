@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Polo Play Designer 3D - Client-Side Tools</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤽</text></svg>">
+<style>
+  :root{
+    --bg:#0e151d; --panel:#17222e; --panel2:#1e2c3b; --line:#2c3e50;
+    --text:#e9f0f6; --dim:#9db0c0; --accent:#ffd166; --accent2:#3ddc84;
+    --danger:#ff6b6b; --sel:#4dd0e1;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px; line-height:1.2;
+  }
+  button:hover{background:#26374a;}
+  button:disabled{opacity:.4; cursor:default;}
+  button.primary{background:var(--accent); color:#20242c; border-color:transparent; font-weight:600;}
+  button.primary:hover{background:#ffdd88;}
+  button.active{background:var(--sel); color:#0b2a30; border-color:transparent; font-weight:600;}
+  select,input[type=text],input[type=number]{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font-size:13px;
+  }
+  input[type=checkbox]{accent-color:var(--accent);}
+  label.chk{display:inline-flex; align-items:center; gap:5px; color:var(--dim); cursor:pointer; white-space:nowrap;}
+
+  header{background:var(--panel); border-bottom:1px solid var(--line); padding:7px 12px; flex:0 0 auto;}
+  .hrow{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .hrow + .hrow{margin-top:6px;}
+  header h1{font-size:16px; font-weight:700; white-space:nowrap;}
+  header .back{color:var(--dim); text-decoration:none; font-size:13px; white-space:nowrap;}
+  header .back:hover{color:var(--text);}
+  #playName{width:180px; font-weight:600;}
+  .spacer{flex:1;}
+  .grp{display:flex; align-items:center; gap:6px; padding:2px 8px; border-left:1px solid var(--line);}
+  .grp:first-child{border-left:none; padding-left:0;}
+  .glabel{color:var(--dim); font-size:12px; white-space:nowrap;}
+
+  main{flex:1 1 auto; display:flex; min-height:0;}
+  #toolbar{
+    flex:0 0 118px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; gap:5px; padding:10px 8px; overflow-y:auto;
+  }
+  #toolbar button{text-align:left; display:flex; align-items:center; gap:7px; padding:8px 8px;}
+  #toolbar .swatch{width:16px; text-align:center; font-size:14px; flex:0 0 16px;}
+  #legend{margin-top:auto; padding-top:10px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); line-height:1.9;}
+  #legend .lg{display:flex; align-items:center; gap:6px;}
+  #legend svg{flex:0 0 34px;}
+
+  #stage{flex:1 1 auto; position:relative; min-width:0; background:#0a1016; overflow:hidden;}
+  #pool{display:block; touch-action:none; position:absolute; inset:0;}
+  #camHint{
+    position:absolute; right:10px; top:10px; background:rgba(10,16,22,.72);
+    border:1px solid var(--line); border-radius:6px; padding:6px 9px;
+    font-size:11px; color:var(--dim); line-height:1.6; pointer-events:none;
+  }
+
+  #panel{
+    flex:0 0 228px; background:var(--panel); border-left:1px solid var(--line);
+    padding:12px 12px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;
+  }
+  #panel h3{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:6px;}
+  #panel .row{display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap;}
+  #panel .row label{color:var(--dim); font-size:12px;}
+  #hint{font-size:12px; color:var(--dim); line-height:1.5; background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px;}
+
+  footer{flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);}
+  #transport{display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--line);}
+  #scrub{flex:1;}
+  input[type=range]{accent-color:var(--accent); height:22px;}
+  #timeStr{font-variant-numeric:tabular-nums; color:var(--dim); font-size:12px; white-space:nowrap;}
+  #timelineWrap{display:flex; align-items:stretch; gap:8px; padding:8px 12px; overflow-x:auto;}
+  .thumb{
+    flex:0 0 auto; background:var(--panel2); border:2px solid var(--line); border-radius:6px;
+    padding:4px; cursor:pointer; position:relative; display:flex; flex-direction:column; gap:3px;
+  }
+  .thumb.cur{border-color:var(--accent);}
+  .thumb.playing{border-color:var(--accent2);}
+  .thumb canvas{display:block; border-radius:3px; background:#123;}
+  .thumb .cap{display:flex; justify-content:space-between; font-size:11px; color:var(--dim); padding:0 2px;}
+  .thumb .del{
+    position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%;
+    background:var(--danger); color:#fff; border:none; font-size:11px; line-height:1; padding:0; display:none;
+  }
+  .thumb:hover .del{display:block;}
+  .thumb.dragover{outline:2px dashed var(--sel);}
+  #addFrameBtn{flex:0 0 auto; align-self:stretch; font-size:13px; padding:0 16px;}
+
+  .overlay{position:fixed; inset:0; background:rgba(4,8,12,.72); display:none; align-items:center; justify-content:center; z-index:50;}
+  .overlay.show{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; width:340px; max-width:92vw;}
+  .modal h2{font-size:15px; margin-bottom:12px;}
+  .modal .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .modal .row label{color:var(--dim);}
+  .modal .btns{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+  #progBarWrap{background:var(--panel2); border-radius:5px; height:10px; overflow:hidden; margin:12px 0 4px;}
+  #progBar{height:100%; width:0%; background:var(--accent2); transition:width .15s;}
+  #progText{color:var(--dim); font-size:12px;}
+
+  #toast{
+    position:fixed; left:50%; bottom:120px; transform:translateX(-50%);
+    background:#101820ee; border:1px solid var(--line); color:var(--text);
+    padding:9px 16px; border-radius:8px; font-size:13px; z-index:60;
+    opacity:0; pointer-events:none; transition:opacity .25s; max-width:70vw; text-align:center;
+  }
+  #toast.show{opacity:1;}
+  kbd{background:var(--panel2); border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:11px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <a href="../../" class="back">← Tools</a>
+    <h1>Water Polo Play Designer <span style="color:var(--accent)">3D</span></h1>
+    <input type="text" id="playName" value="New Play" title="Play name">
+    <div class="grp">
+      <button id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button id="redoBtn" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="grp">
+      <button id="saveBtn" title="Download play as JSON (compatible with the 2D designer)">Save JSON</button>
+      <button id="loadBtn" title="Load play from JSON">Load</button>
+      <input type="file" id="loadFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="grp">
+      <button id="gifBtn" class="primary" title="Export animated GIF">Export GIF</button>
+      <button id="vidBtn" class="primary" title="Export WebM video">Export Video</button>
+    </div>
+  </div>
+  <div class="hrow">
+    <div class="grp">
+      <button id="preset66">Reset to 6-on-6</button>
+      <button id="preset42">4-2 Set</button>
+      <button id="presetClear">Empty Pool</button>
+    </div>
+    <div class="grp">
+      <span class="glabel">Pool</span>
+      <select id="poolLen"><option value="25">25 m (default)</option><option value="30">30 m (men's)</option></select>
+      <select id="lineRule"><option value="6">6 m line</option><option value="5">5 m line</option></select>
+      <label class="chk"><input type="checkbox" id="snapToggle"> Grid snap</label>
+    </div>
+    <div class="grp">
+      <span class="glabel">Camera</span>
+      <button data-cam="point" title="Behind the offense">Point</button>
+      <button data-cam="side" title="Broadcast side view">Side</button>
+      <button data-cam="goal" title="Behind the goal">Goal</button>
+      <button data-cam="top" title="Top-down">Top</button>
+      <label class="chk" title="Slowly orbit the camera during playback and exports"><input type="checkbox" id="orbitToggle"> Orbit on play</label>
+    </div>
+  </div>
+</header>
+
+<main>
+  <aside id="toolbar">
+    <button data-tool="select" class="active"><span class="swatch">↖</span>Select <kbd>V</kbd></button>
+    <button data-tool="addO"><span class="swatch">⬤</span>Add White</button>
+    <button data-tool="addD"><span class="swatch" style="color:#4d6fd8">⬤</span>Add Blue</button>
+    <button data-tool="ball"><span class="swatch" style="color:#ffd166">●</span>Ball <kbd>B</kbd></button>
+    <button data-tool="drive"><span class="swatch" style="color:#3ddc84">→</span>Drive <kbd>D</kbd></button>
+    <button data-tool="pass"><span class="swatch" style="color:#ffd166">⇢</span>Pass <kbd>P</kbd></button>
+    <button data-tool="screen"><span class="swatch">⊥</span>Screen <kbd>S</kbd></button>
+    <button data-tool="label"><span class="swatch">T</span>Text <kbd>T</kbd></button>
+    <button data-tool="erase"><span class="swatch" style="color:#ff6b6b">✕</span>Erase <kbd>E</kbd></button>
+    <div id="legend">
+      <div class="lg"><svg width="34" height="10"><line x1="1" y1="5" x2="26" y2="5" stroke="#3ddc84" stroke-width="2"/><path d="M25 1 L33 5 L25 9 Z" fill="#3ddc84"/></svg>drive</div>
+      <div class="lg"><svg width="34" height="10"><line x1="1" y1="5" x2="26" y2="5" stroke="#ffd166" stroke-width="2" stroke-dasharray="5 3"/><path d="M25 1 L33 5 L25 9 Z" fill="#ffd166"/></svg>pass</div>
+      <div class="lg"><svg width="34" height="12"><line x1="1" y1="6" x2="28" y2="6" stroke="#e9f0f6" stroke-width="2"/><line x1="28" y1="1" x2="28" y2="11" stroke="#e9f0f6" stroke-width="2"/></svg>screen</div>
+    </div>
+  </aside>
+
+  <div id="stage">
+    <canvas id="pool"></canvas>
+    <div id="camHint">🎥 drag water / right-drag: orbit<br>shift-drag or middle-drag: pan<br>wheel: zoom &nbsp;·&nbsp; <kbd>R</kbd> reset</div>
+  </div>
+
+  <aside id="panel">
+    <div>
+      <h3 id="frameTitle">Frame 1 of 1</h3>
+      <div class="row" id="durRow">
+        <label for="durInput">Transition in</label>
+        <input type="number" id="durInput" min="100" max="20000" step="100" value="1200" style="width:76px"> <span style="color:var(--dim)">ms</span>
+      </div>
+      <div class="row">
+        <button id="addFramePanelBtn">＋ Add Frame</button>
+        <button id="delFrameBtn" title="Delete current frame">Delete</button>
+      </div>
+    </div>
+    <div id="selBox" style="display:none">
+      <h3>Selected Player</h3>
+      <div class="row"><label>Cap #</label><input type="number" id="capInput" min="1" max="99" style="width:60px"></div>
+      <div class="row"><label>Team</label>
+        <select id="teamInput"><option value="W">White</option><option value="B">Blue</option></select>
+      </div>
+      <div class="row"><label class="chk"><input type="checkbox" id="gkInput"> Goalkeeper (red cap)</label></div>
+      <div class="row"><button id="removePlayerBtn" style="color:var(--danger)">Remove player</button></div>
+    </div>
+    <div>
+      <h3>Tool</h3>
+      <div id="hint"></div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div id="transport">
+    <button id="playBtn" style="width:74px">▶ Play</button>
+    <label class="chk"><input type="checkbox" id="loopToggle" checked> Loop</label>
+    <span class="glabel">Speed</span>
+    <select id="speedSel">
+      <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+    </select>
+    <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+    <span id="timeStr">0.0 / 0.0 s</span>
+  </div>
+  <div id="timelineWrap">
+    <div id="timeline" style="display:flex; gap:8px;"></div>
+    <button id="addFrameBtn" title="Add a frame that starts from the current frame's end state">＋ Add<br>Frame</button>
+  </div>
+</footer>
+
+<!-- Export modal -->
+<div class="overlay" id="exportModal">
+  <div class="modal">
+    <h2 id="exportTitle">Export GIF</h2>
+    <div class="row"><label>Resolution (width)</label>
+      <select id="expWidth">
+        <option value="640">640 px</option>
+        <option value="960" selected>960 px</option>
+        <option value="1280">1280 px</option>
+        <option value="1920">1920 px</option>
+      </select>
+    </div>
+    <div class="row"><label>Frame rate</label>
+      <select id="expFps">
+        <option value="10">10 fps</option><option value="15" selected>15 fps</option>
+        <option value="24">24 fps</option><option value="30">30 fps</option>
+      </select>
+    </div>
+    <div class="row" id="expLoopRow"><label>Play-throughs</label>
+      <select id="expLoops"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select>
+    </div>
+    <div class="row"><span id="expNote" style="color:var(--dim); font-size:12px;">Exports a 16:9 view from the current camera. “Orbit on play” is applied if enabled.</span></div>
+    <div class="btns">
+      <button id="expCancel">Cancel</button>
+      <button id="expStart" class="primary">Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- Progress modal -->
+<div class="overlay" id="progModal">
+  <div class="modal">
+    <h2 id="progTitle">Exporting…</h2>
+    <div id="progBarWrap"><div id="progBar"></div></div>
+    <div id="progText">Rendering frames…</div>
+    <div class="btns"><button id="progCancel">Cancel</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =======================================================================
+   Water Polo Play Designer 3D — self-contained single-page app.
+   Same play data model as the 2D designer (files are interchangeable):
+   a Play is an ordered list of Frames; drives/passes/screens on frame i
+   describe the transition FROM frame i-1 INTO frame i.
+   World space: x across pool width, y along pool length (attacked goal
+   at y=0), z up (water surface at z=0), all in meters. Rendering is a
+   software perspective projection onto a 2D canvas (painter's
+   algorithm), so exports capture exactly what you see.
+   ======================================================================= */
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp = (a,b,t)=>a+(b-a)*t;
+const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+const easeInOut = t => t<0 ? 0 : t>1 ? 1 : (t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2);
+const deep = o => JSON.parse(JSON.stringify(o));
+const RAD = Math.PI/180;
+
+const COLORS = {
+  deck:'#1b2836',
+  water:'#2b6ea8', waterFar:'#245d8f',
+  lineWhite:'#f2f6fa', lineRed:'#ff5252', lineYellow:'#ffe14d',
+  drive:'#3ddc84', pass:'#ffd166', screen:'#eef3f8', implied:'rgba(240,246,252,0.38)',
+  ball:'#ffc233', ballEdge:'#7a5200',
+  capW:'#f4f7fa', capWText:'#16202b', capB:'#28409c', capBText:'#ffffff',
+  capGK:'#d63031', sel:'#4dd0e1', ghost:0.30
+};
+const PLAYER_R = 0.5;            // body radius on the water (m)
+const CAP_Z = 0.32;              // cap height above water (m)
+const CAP_R = 0.34;              // cap radius (m)
+const BALL_R = 0.24;
+const BALL_FLOAT_Z = 0.14;
+const BALL_OFF = {x:0.55, y:-0.4};
+const END_HOLD_MS = 700;
+const NEAR = 0.2;                // near clip plane (m)
+const ORBIT_RATE = 0.00010;      // rad/ms for "orbit on play"
+
+/* ---------------- state ---------------- */
+let idCounter = 1;
+const uid = p => p + (idCounter++);
+
+let play = null;
+const ui = {
+  tool:'select', currentFrame:0, snap:false,
+  selection:null,
+  playing:false, animActive:false, time:0, speed:1, loop:true, orbitPlay:false,
+  draft:null, drag:null, camDrag:null,
+};
+const cam = { target:{x:10, y:4.5}, dist:20, yaw:0, pitch:42*RAD, fov:50*RAD };
+let undoStack = [], redoStack = [];
+const UNDO_MAX = 100;
+const LS_KEY = 'water-polo-play-designer-3d:v1';
+
+function makeFrame(players, ball){
+  return { id: uid('f'), durationMs: 1200, players: players||[], ball: ball||{x:10,y:8},
+           drives: [], passes: [], screens: [], labels: [] };
+}
+function meta(){ return play.meta; }
+function curFrame(){ return play.frames[ui.currentFrame]; }
+function playerIn(frame,id){ return frame.players.find(p=>p.id===id); }
+
+/* ---------------- camera ---------------- */
+function camPresets(name){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  const P={
+    point:{ target:{x:W/2,y:4.5}, dist:20, yaw:0,        pitch:42*RAD },
+    side: { target:{x:W/2,y:L*0.28}, dist:24, yaw:90*RAD, pitch:30*RAD },
+    goal: { target:{x:W/2,y:4},   dist:16, yaw:180*RAD,  pitch:26*RAD },
+    top:  { target:{x:W/2,y:L*0.28}, dist:19, yaw:0,     pitch:86*RAD },
+  };
+  return P[name]||P.point;
+}
+function setCamPreset(name){
+  Object.assign(cam, deep(camPresets(name)));
+  render();
+}
+function clampCam(){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  cam.pitch=clamp(cam.pitch, 10*RAD, 89*RAD);
+  cam.dist=clamp(cam.dist, 5, 80);
+  cam.target.x=clamp(cam.target.x,-3,W+3);
+  cam.target.y=clamp(cam.target.y,-5,L+5);
+}
+
+/* Camera basis for a canvas of size w×h; yawOff lets playback/export orbit. */
+let CV=null;   // current view: {eye,right,up,fwd,f,w,h}
+function computeView(c, w, h, yawOff){
+  const yaw=c.yaw+(yawOff||0);
+  const cp=Math.cos(c.pitch), sp=Math.sin(c.pitch);
+  const eye={ x:c.target.x + c.dist*cp*Math.sin(yaw),
+              y:c.target.y + c.dist*cp*Math.cos(yaw),
+              z: c.dist*sp };
+  const tgt={x:c.target.x, y:c.target.y, z:0};
+  let fwd={x:tgt.x-eye.x, y:tgt.y-eye.y, z:tgt.z-eye.z};
+  const fl=Math.hypot(fwd.x,fwd.y,fwd.z)||1; fwd={x:fwd.x/fl,y:fwd.y/fl,z:fwd.z/fl};
+  // right = fwd × worldUp(0,0,1), normalized
+  let right={x:fwd.y*1-0, y:0-fwd.x*1, z:0};
+  const rl=Math.hypot(right.x,right.y)||1; right={x:right.x/rl,y:right.y/rl,z:0};
+  // up = right × fwd
+  const up={ x:right.y*fwd.z-right.z*fwd.y, y:right.z*fwd.x-right.x*fwd.z, z:right.x*fwd.y-right.y*fwd.x };
+  const f=(h/2)/Math.tan(c.fov/2);
+  return {eye,right,up,fwd,f,w,h};
+}
+function toCamSpace(p){
+  const v={x:p.x-CV.eye.x, y:p.y-CV.eye.y, z:(p.z||0)-CV.eye.z};
+  return { x:v.x*CV.right.x+v.y*CV.right.y+v.z*CV.right.z,
+           y:v.x*CV.up.x+v.y*CV.up.y+v.z*CV.up.z,
+           z:v.x*CV.fwd.x+v.y*CV.fwd.y+v.z*CV.fwd.z };
+}
+function camToScreen(c){ return {x:CV.w/2+CV.f*c.x/c.z, y:CV.h/2-CV.f*c.y/c.z, s:CV.f/c.z, d:c.z}; }
+function proj(p){
+  const c=toCamSpace(p);
+  if(c.z<NEAR) return null;
+  return camToScreen(c);
+}
+/* project a 3D polyline, clipping at the near plane; returns list of screen runs */
+function projPath(pts){
+  const cams=pts.map(toCamSpace);
+  const runs=[]; let run=[];
+  const push=(c)=>run.push(camToScreen(c));
+  for(let i=0;i<cams.length;i++){
+    const a=cams[i];
+    if(i===0){ if(a.z>NEAR) push(a); continue; }
+    const p=cams[i-1];
+    const pin=p.z>NEAR, ain=a.z>NEAR;
+    if(pin!==ain){
+      const t=(NEAR-p.z)/(a.z-p.z);
+      const m={x:lerp(p.x,a.x,t), y:lerp(p.y,a.y,t), z:NEAR+1e-6};
+      push(m);
+      if(!ain){ runs.push(run); run=[]; }
+    }
+    if(ain) push(a);
+  }
+  if(run.length) runs.push(run);
+  return runs.filter(r=>r.length>1);
+}
+function projPoly(pts){   // clip polygon at near plane, return screen points
+  const cams=pts.map(toCamSpace);
+  const out=[];
+  for(let i=0;i<cams.length;i++){
+    const a=cams[i], b=cams[(i+1)%cams.length];
+    const ain=a.z>NEAR, bin=b.z>NEAR;
+    if(ain) out.push(a);
+    if(ain!==bin){
+      const t=(NEAR-a.z)/(b.z-a.z);
+      out.push({x:lerp(a.x,b.x,t), y:lerp(a.y,b.y,t), z:NEAR+1e-6});
+    }
+  }
+  return out.map(camToScreen);
+}
+/* ray from a screen point to the water plane z=0 */
+function screenToWater(px,py){
+  const dx=(px-CV.w/2)/CV.f, dy=-(py-CV.h/2)/CV.f;
+  const dir={ x:CV.fwd.x+CV.right.x*dx+CV.up.x*dy,
+              y:CV.fwd.y+CV.right.y*dx+CV.up.y*dy,
+              z:CV.fwd.z+CV.right.z*dx+CV.up.z*dy };
+  if(dir.z>=-1e-6) return null;              // looking at or above the horizon
+  const t=-CV.eye.z/dir.z;
+  return { x:CV.eye.x+dir.x*t, y:CV.eye.y+dir.y*t };
+}
+
+/* ---------------- presets / play ---------------- */
+function goalCenter(){ return {x: meta().poolWidthM/2, y: 0}; }
+function markUp(attackers, spacing){
+  return attackers.map(a=>{
+    const g=goalCenter();
+    const d=Math.max(0.01, dist(a,g));
+    const t=Math.min(spacing/d, 0.5);
+    return { x:lerp(a.x,g.x,t), y:lerp(a.y,g.y,t) };
+  });
+}
+function buildPreset(offSpots){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  const players=[];
+  offSpots.forEach((s,i)=>players.push({id:'o'+(i+1), team:'W', gk:false, cap:i+1, x:s.x, y:s.y}));
+  markUp(offSpots,1.1).forEach((s,i)=>players.push({id:'d'+(i+1), team:'B', gk:false, cap:i+1, x:s.x, y:s.y}));
+  players.push({id:'ogk', team:'W', gk:true, cap:1, x:W/2, y:L-0.7});
+  players.push({id:'dgk', team:'B', gk:true, cap:1, x:W/2, y:0.7});
+  return players;
+}
+function standardSixSpots(){
+  const cx=meta().poolWidthM/2;
+  return [
+    {x:cx,y:7.2},{x:cx-3.6,y:5.2},{x:cx+3.6,y:5.2},
+    {x:cx-6.5,y:1.6},{x:cx+6.5,y:1.6},{x:cx,y:2.6},
+  ];
+}
+function applyPreset(kind){
+  pushUndo();
+  const cx=meta().poolWidthM/2;
+  let frames;
+  if(kind==='clear'){
+    frames=[ makeFrame([], {x:cx,y:8}) ];
+  }else if(kind==='42'){
+    const off=[
+      {x:cx-6.5,y:4.6},{x:cx-2.4,y:6.6},{x:cx+2.4,y:6.6},
+      {x:cx+6.5,y:4.6},{x:cx-2.0,y:2.5},{x:cx+2.0,y:2.5},
+    ];
+    frames=[ makeFrame(buildPreset(off), {holderId:'o2'}) ];
+  }else{
+    frames=[ makeFrame(buildPreset(standardSixSpots()), {holderId:'o1'}) ];
+  }
+  play.frames=frames;
+  ui.currentFrame=0; ui.selection=null; stopPlayback();
+  commit();
+}
+function newPlay(){
+  play={ meta:{ name:'New Play', poolLengthM:25, poolWidthM:20, sixMeterLine:true, fps:30 }, frames:[] };
+  play.frames=[ makeFrame([], {x:10,y:8}) ];
+}
+
+/* ---------------- undo / redo ---------------- */
+function snapshot(){ return { play: deep(play), cur: ui.currentFrame }; }
+function pushUndo(){
+  undoStack.push(snapshot());
+  if(undoStack.length>UNDO_MAX) undoStack.shift();
+  redoStack.length=0;
+  updateUndoButtons();
+}
+function restoreSnap(s){
+  play=deep(s.play);
+  ui.currentFrame=clamp(s.cur,0,play.frames.length-1);
+  ui.selection=null; ui.draft=null; ui.drag=null;
+  stopPlayback();
+  commit(false);
+}
+function undo(){ if(!undoStack.length) return; redoStack.push(snapshot()); restoreSnap(undoStack.pop()); updateUndoButtons(); }
+function redo(){ if(!redoStack.length) return; undoStack.push(snapshot()); restoreSnap(redoStack.pop()); updateUndoButtons(); }
+function updateUndoButtons(){ $('undoBtn').disabled=!undoStack.length; $('redoBtn').disabled=!redoStack.length; }
+
+/* ---------------- geometry ---------------- */
+function pathLen(pts){ let l=0; for(let i=1;i<pts.length;i++) l+=dist(pts[i-1],pts[i]); return l; }
+function pointAlongPath(pts, frac){
+  if(pts.length===1) return {...pts[0]};
+  const total=pathLen(pts);
+  if(total<=0) return {...pts[pts.length-1]};
+  let target=clamp(frac,0,1)*total;
+  for(let i=1;i<pts.length;i++){
+    const seg=dist(pts[i-1],pts[i]);
+    if(target<=seg && seg>0){ const t=target/seg; return {x:lerp(pts[i-1].x,pts[i].x,t), y:lerp(pts[i-1].y,pts[i].y,t)}; }
+    target-=seg;
+  }
+  return {...pts[pts.length-1]};
+}
+function pointSegDist(p,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y, l2=dx*dx+dy*dy;
+  if(l2===0) return dist(p,a);
+  const t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/l2,0,1);
+  return dist(p,{x:a.x+t*dx, y:a.y+t*dy});
+}
+function pointPathDist(p,pts){
+  let m=Infinity;
+  for(let i=1;i<pts.length;i++) m=Math.min(m,pointSegDist(p,pts[i-1],pts[i]));
+  return m;
+}
+function rdp(pts,eps){
+  if(pts.length<3) return pts.slice();
+  let maxD=0, idx=0;
+  for(let i=1;i<pts.length-1;i++){
+    const d=pointSegDist(pts[i],pts[0],pts[pts.length-1]);
+    if(d>maxD){ maxD=d; idx=i; }
+  }
+  if(maxD>eps){
+    const a=rdp(pts.slice(0,idx+1),eps), b=rdp(pts.slice(idx),eps);
+    return a.slice(0,-1).concat(b);
+  }
+  return [pts[0],pts[pts.length-1]];
+}
+function qBez(a,c,b,t){
+  const u=1-t;
+  return { x:u*u*a.x+2*u*t*c.x+t*t*b.x, y:u*u*a.y+2*u*t*c.y+t*t*b.y };
+}
+function passCtrl(a,b){
+  const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+  const dx=b.x-a.x, dy=b.y-a.y, l=Math.hypot(dx,dy)||1;
+  const k=Math.min(1.4,l*0.12);
+  return { x:mx+(dy/l)*k, y:my-(dx/l)*k };
+}
+function lobHeight(len){ return clamp(0.35+len*0.13, 0.4, 2.6); }
+
+/* ---------------- ball / player resolution ---------------- */
+function resolveBallStatic(frame){
+  if(frame.ball && frame.ball.holderId){
+    const h=playerIn(frame,frame.ball.holderId);
+    if(h) return { x:h.x+BALL_OFF.x, y:h.y+BALL_OFF.y };
+    return {x:meta().poolWidthM/2, y:8};
+  }
+  return { x:frame.ball.x, y:frame.ball.y };
+}
+function playerPosAtRaw(i,id,p){
+  const B=play.frames[i], A=play.frames[i-1];
+  const pb=playerIn(B,id);
+  if(!pb) return null;
+  const pa=A?playerIn(A,id):null;
+  if(!pa) return {x:pb.x,y:pb.y};
+  const pe=easeInOut(p);
+  const drive=(B.drives||[]).find(d=>d.playerId===id);
+  if(drive && drive.points.length)
+    return pointAlongPath([{x:pa.x,y:pa.y},...drive.points],pe);
+  return { x:lerp(pa.x,pb.x,pe), y:lerp(pa.y,pb.y,pe) };
+}
+function endpointStatic(ep,frame){
+  if(typeof ep==='string'){ const pl=playerIn(frame,ep); return pl?{x:pl.x,y:pl.y}:null; }
+  return ep?{x:ep.x,y:ep.y}:null;
+}
+
+/* ---------------- timeline sampling ---------------- */
+function timelineSegments(){
+  const segs=[]; let acc=0;
+  for(let i=1;i<play.frames.length;i++){
+    const d=Math.max(100,play.frames[i].durationMs||1000);
+    segs.push({i,start:acc,dur:d}); acc+=d;
+  }
+  return {segs,total:acc};
+}
+function staticScene(i){
+  const f=play.frames[i];
+  const b=resolveBallStatic(f);
+  return { frameIndex:i, progress:1,
+    players:f.players.map(p=>({...p})),
+    ballPos:{x:b.x, y:b.y, z:BALL_FLOAT_Z} };
+}
+function sampleScene(t){
+  const {segs,total}=timelineSegments();
+  if(!segs.length) return staticScene(0);
+  if(t<=0) return staticScene(0);
+  if(t>=total) return staticScene(play.frames.length-1);
+  const seg=segs.find(s=>t<s.start+s.dur);
+  return transitionScene(seg.i,(t-seg.start)/seg.dur);
+}
+function transitionScene(i,p){
+  const A=play.frames[i-1], B=play.frames[i];
+  const players=B.players.map(pb=>({ ...pb, ...playerPosAtRaw(i,pb.id,p) }));
+  const posOf=(id,raw)=>playerPosAtRaw(i,id,raw)||{x:10,y:10};
+
+  let ballPos;
+  const passes=B.passes||[];
+  if(passes.length){
+    const n=passes.length;
+    const k=Math.min(n-1,Math.floor(p*n));
+    const q=easeInOut(clamp(p*n-k,0,1));
+    const pass=passes[k];
+    const fromPos=typeof pass.from==='string'?posOf(pass.from,k/n):{x:pass.from.x,y:pass.from.y};
+    const toPos=typeof pass.to==='string'?posOf(pass.to,p):{x:pass.to.x,y:pass.to.y};
+    if(typeof pass.from==='string'){ fromPos.x+=BALL_OFF.x; fromPos.y+=BALL_OFF.y; }
+    const toBall=typeof pass.to==='string'?{x:toPos.x+BALL_OFF.x,y:toPos.y+BALL_OFF.y}:toPos;
+    const flat=qBez(fromPos,passCtrl(fromPos,toBall),toBall,q);
+    const h=lobHeight(dist(fromPos,toBall));
+    ballPos={x:flat.x, y:flat.y, z:BALL_FLOAT_Z + 4*h*q*(1-q)};
+  }else{
+    const aH=A.ball&&A.ball.holderId, bH=B.ball&&B.ball.holderId;
+    let flat;
+    if(aH&&bH&&aH===bH){
+      const hp=posOf(bH,p);
+      flat={x:hp.x+BALL_OFF.x, y:hp.y+BALL_OFF.y};
+    }else{
+      const a=resolveBallStatic(A), b=resolveBallStatic(B);
+      const pe=easeInOut(p);
+      flat={ x:lerp(a.x,b.x,pe), y:lerp(a.y,b.y,pe) };
+    }
+    ballPos={x:flat.x, y:flat.y, z:BALL_FLOAT_Z};
+  }
+  return { frameIndex:i, progress:p, players, ballPos };
+}
+
+/* ---------------- 3D rendering ---------------- */
+const canvas=$('pool');
+const cx2d=canvas.getContext('2d');
+
+function fitCanvas(){
+  const stage=$('stage');
+  const cw=Math.max(120,stage.clientWidth), ch=Math.max(120,stage.clientHeight);
+  const dpr=window.devicePixelRatio||1;
+  canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  canvas.width=Math.round(cw*dpr); canvas.height=Math.round(ch*dpr);
+  cx2d.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function fillPoly(ctx, scr, style){
+  if(scr.length<3) return;
+  ctx.fillStyle=style;
+  ctx.beginPath();
+  ctx.moveTo(scr[0].x,scr[0].y);
+  for(let i=1;i<scr.length;i++) ctx.lineTo(scr[i].x,scr[i].y);
+  ctx.closePath(); ctx.fill();
+}
+function strokePath3(ctx, pts3, color, widthM, dashM, alpha){
+  const runs=projPath(pts3);
+  if(!runs.length) return null;
+  ctx.save();
+  if(alpha!=null) ctx.globalAlpha=alpha;
+  ctx.strokeStyle=color; ctx.lineCap='round'; ctx.lineJoin='round';
+  let lastRun=null;
+  for(const run of runs){
+    let s=0; for(const p of run) s+=p.s; s/=run.length;
+    ctx.lineWidth=Math.max(1.2, widthM*s);
+    if(dashM) ctx.setLineDash([dashM[0]*s, dashM[1]*s]); else ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(run[0].x,run[0].y);
+    for(let i=1;i<run.length;i++) ctx.lineTo(run[i].x,run[i].y);
+    ctx.stroke();
+    lastRun=run;
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+  return lastRun;
+}
+function line3(ctx,a,b,color,widthM,alpha){ strokePath3(ctx,[a,b],color,widthM,null,alpha); }
+function arrowHeadScr(ctx, tip, prev, sizePx, color, alpha){
+  const dx=tip.x-prev.x, dy=tip.y-prev.y, l=Math.hypot(dx,dy)||1;
+  const ux=dx/l, uy=dy/l;
+  ctx.save();
+  if(alpha!=null) ctx.globalAlpha=alpha;
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(tip.x,tip.y);
+  ctx.lineTo(tip.x-sizePx*ux+sizePx*0.5*uy, tip.y-sizePx*uy-sizePx*0.5*ux);
+  ctx.lineTo(tip.x-sizePx*ux-sizePx*0.5*uy, tip.y-sizePx*uy+sizePx*0.5*ux);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+/* densify a 2D waypoint path so it projects smoothly, lift to z=0 */
+function densify(pts,step){
+  const out=[pts[0]];
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1], b=pts[i], d=dist(a,b);
+    const n=Math.max(1,Math.ceil(d/step));
+    for(let k=1;k<=n;k++) out.push({x:lerp(a.x,b.x,k/n), y:lerp(a.y,b.y,k/n)});
+  }
+  return out;
+}
+/* Catmull-Rom smoothing of waypoints (matches the 2D tool's smoothed look) */
+function smoothPath(pts){
+  if(pts.length<3) return densify(pts,0.4);
+  const out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(0,i-1)], p1=pts[i], p2=pts[i+1], p3=pts[Math.min(pts.length-1,i+2)];
+    const n=Math.max(2,Math.ceil(dist(p1,p2)/0.35));
+    for(let k=(i===0?0:1);k<=n;k++){
+      const t=k/n, t2=t*t, t3=t2*t;
+      out.push({
+        x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+        y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
+      });
+    }
+  }
+  return out;
+}
+
+function drawDrive3(ctx,pts,alpha){
+  if(pts.length<2) return;
+  const run=strokePath3(ctx, smoothPath(pts), COLORS.drive, 0.13, null, alpha);
+  if(run&&run.length>1){
+    const tip=run[run.length-1];
+    arrowHeadScr(ctx, tip, run[run.length-2], Math.max(6,0.55*tip.s), COLORS.drive, alpha);
+  }
+}
+function drawPass3(ctx,from,to,alpha){
+  const c=passCtrl(from,to);
+  const pts=[];
+  for(let t=0;t<=1.0001;t+=0.05) pts.push(qBez(from,c,to,t));
+  const run=strokePath3(ctx, pts, COLORS.pass, 0.12, [0.45,0.3], alpha);
+  if(run&&run.length>1){
+    const tip=run[run.length-1];
+    arrowHeadScr(ctx, tip, run[run.length-2], Math.max(6,0.55*tip.s), COLORS.pass, alpha);
+  }
+}
+function drawScreen3(ctx,from,to,alpha){
+  const dx=to.x-from.x, dy=to.y-from.y, l=Math.hypot(dx,dy)||1;
+  const ux=dx/l, uy=dy/l;
+  const end={x:to.x-ux*0.75, y:to.y-uy*0.75};
+  strokePath3(ctx,[from,end],COLORS.screen,0.13,null,alpha);
+  strokePath3(ctx,[{x:end.x-uy*0.55,y:end.y+ux*0.55},{x:end.x+uy*0.55,y:end.y-ux*0.55}],COLORS.screen,0.13,null,alpha);
+}
+function drawImplied3(ctx,from,to){
+  if(dist(from,to)<0.35) return;
+  const run=strokePath3(ctx,[from,to],COLORS.implied,0.08,null);
+  if(run&&run.length>1){
+    const tip=run[run.length-1];
+    arrowHeadScr(ctx, tip, run[run.length-2], Math.max(5,0.4*tip.s), 'rgba(240,246,252,0.5)');
+  }
+}
+
+function drawPoolScene(ctx){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  // sky
+  const g=ctx.createLinearGradient(0,0,0,CV.h);
+  g.addColorStop(0,'#0a121c'); g.addColorStop(0.55,'#14273a'); g.addColorStop(1,'#0d1926');
+  ctx.fillStyle=g; ctx.fillRect(0,0,CV.w,CV.h);
+
+  // deck
+  fillPoly(ctx, projPoly([{x:-4,y:-6},{x:W+4,y:-6},{x:W+4,y:L+5},{x:-4,y:L+5}]), COLORS.deck);
+  // water
+  fillPoly(ctx, projPoly([{x:0,y:0},{x:W,y:0},{x:W,y:L},{x:0,y:L}]), COLORS.water);
+  // subtle water shading toward the far end
+  fillPoly(ctx, projPoly([{x:0,y:L*0.55},{x:W,y:L*0.55},{x:W,y:L},{x:0,y:L}]), 'rgba(10,30,50,0.18)');
+
+  // grid (snap aid)
+  if(ui.snap && ctx===cx2d){
+    for(let x=1;x<W;x++) strokePath3(ctx,[{x,y:0},{x,y:L}],'rgba(255,255,255,0.07)',0.03);
+    for(let y=1;y<L;y++) strokePath3(ctx,[{x:0,y},{x:W,y}],'rgba(255,255,255,0.07)',0.03);
+  }
+
+  const kLine=meta().sixMeterLine?6:5;
+  for(const e of [{gl:0,dir:1},{gl:L,dir:-1}]){
+    strokePath3(ctx,[{x:0,y:e.gl+2*e.dir},{x:W,y:e.gl+2*e.dir}],COLORS.lineRed,0.14);
+    strokePath3(ctx,[{x:0,y:e.gl+kLine*e.dir},{x:W,y:e.gl+kLine*e.dir}],COLORS.lineYellow,0.14);
+    strokePath3(ctx,[{x:0,y:e.gl},{x:W,y:e.gl}],COLORS.lineWhite,0.14);
+    // corner re-entry brackets
+    for(const side of [0,W]){
+      const inw=side===0?1:-1;
+      strokePath3(ctx,[{x:side+0.9*inw,y:e.gl},{x:side,y:e.gl},{x:side,y:e.gl+0.9*e.dir}],COLORS.lineRed,0.18);
+    }
+    // distance labels on the deck side
+    const lp=proj({x:-0.55,y:e.gl+2*e.dir,z:0});
+    if(lp&&lp.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${Math.max(8,0.5*lp.s)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('2m',lp.x,lp.y); }
+    const lp6=proj({x:-0.55,y:e.gl+kLine*e.dir,z:0});
+    if(lp6&&lp6.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${Math.max(8,0.5*lp6.s)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(kLine+'m',lp6.x,lp6.y); }
+  }
+  strokePath3(ctx,[{x:0,y:L/2},{x:W,y:L/2}],COLORS.lineWhite,0.14);
+  // pool edge
+  strokePath3(ctx,[{x:0,y:0},{x:W,y:0},{x:W,y:L},{x:0,y:L},{x:0,y:0}],'rgba(220,232,240,0.6)',0.1);
+}
+
+function drawGoal3(ctx, glY, dir){
+  const W=meta().poolWidthM;
+  const x1=W/2-1.5, x2=W/2+1.5, h=0.9, back=glY-0.8*dir;
+  // net (behind the frame)
+  ctx.save();
+  for(let i=0;i<=6;i++){
+    const x=lerp(x1,x2,i/6);
+    strokePath3(ctx,[{x,y:glY,z:h},{x,y:back,z:0}],'rgba(242,246,250,0.32)',0.025);
+  }
+  for(let k=1;k<=3;k++){
+    const t=k/4;
+    strokePath3(ctx,[{x:x1,y:lerp(glY,back,t),z:h*(1-t)},{x:x2,y:lerp(glY,back,t),z:h*(1-t)}],'rgba(242,246,250,0.25)',0.025);
+  }
+  ctx.restore();
+  // posts + crossbar
+  line3(ctx,{x:x1,y:glY,z:0},{x:x1,y:glY,z:h},COLORS.lineWhite,0.11);
+  line3(ctx,{x:x2,y:glY,z:0},{x:x2,y:glY,z:h},COLORS.lineWhite,0.11);
+  line3(ctx,{x:x1,y:glY,z:h},{x:x2,y:glY,z:h},COLORS.lineWhite,0.11);
+  // back bottom bar
+  line3(ctx,{x:x1,y:back,z:0},{x:x2,y:back,z:0},'rgba(242,246,250,0.5)',0.06);
+}
+
+function drawPlayer3(ctx,p,opts){
+  opts=opts||{};
+  const base=proj({x:p.x,y:p.y,z:0});
+  if(!base) return;
+  const px=proj({x:p.x+PLAYER_R,y:p.y,z:0}), py=proj({x:p.x,y:p.y+PLAYER_R,z:0});
+  if(!px||!py) return;
+  const rx=Math.hypot(px.x-base.x,px.y-base.y);
+  const ry=Math.hypot(py.x-base.x,py.y-base.y);
+  const rot=Math.atan2(px.y-base.y,px.x-base.x);
+  ctx.save();
+  ctx.globalAlpha=opts.alpha!=null?opts.alpha:1;
+  const isGK=p.gk;
+  const capColor=isGK?COLORS.capGK:(p.team==='W'?COLORS.capW:COLORS.capB);
+  // body / wake on the water
+  ctx.beginPath();
+  ctx.ellipse(base.x,base.y,Math.max(1,rx),Math.max(1,ry),rot,0,Math.PI*2);
+  ctx.fillStyle='rgba(8,18,28,0.35)';
+  ctx.fill();
+  ctx.lineWidth=Math.max(1,0.05*base.s);
+  ctx.strokeStyle='rgba(230,240,250,0.35)';
+  ctx.stroke();
+  // cap (billboarded sphere above water)
+  const cap=proj({x:p.x,y:p.y,z:CAP_Z});
+  if(cap){
+    const r=Math.max(2.5,CAP_R*cap.s);
+    const grad=ctx.createRadialGradient(cap.x-r*0.35,cap.y-r*0.4,r*0.15,cap.x,cap.y,r);
+    grad.addColorStop(0, isGK?'#ef6a6a':(p.team==='W'?'#ffffff':'#3d5ac0'));
+    grad.addColorStop(1, capColor);
+    ctx.beginPath(); ctx.arc(cap.x,cap.y,r,0,Math.PI*2);
+    ctx.fillStyle=grad; ctx.fill();
+    ctx.lineWidth=Math.max(1,0.07*cap.s);
+    ctx.strokeStyle=isGK?(p.team==='W'?COLORS.capW:'#7f9cf5'):'rgba(10,16,22,0.65)';
+    ctx.stroke();
+    const fs=Math.max(0,0.42*cap.s);
+    if(fs>=6.5){
+      ctx.fillStyle=isGK?'#fff':(p.team==='W'?COLORS.capWText:COLORS.capBText);
+      ctx.font=`bold ${fs}px sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(String(p.cap),cap.x,cap.y+0.5);
+    }
+    if(opts.selected){
+      ctx.setLineDash([4,3]);
+      ctx.strokeStyle=COLORS.sel; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.ellipse(base.x,base.y,rx+0.2*base.s,ry+0.2*base.s,rot,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  ctx.restore();
+}
+function drawBall3(ctx,pos,alpha){
+  const p=proj({x:pos.x,y:pos.y,z:pos.z!=null?pos.z:BALL_FLOAT_Z});
+  if(!p) return;
+  ctx.save();
+  ctx.globalAlpha=alpha!=null?alpha:1;
+  // shadow on the water when airborne
+  if((pos.z||0)>0.5){
+    const sh=proj({x:pos.x,y:pos.y,z:0});
+    if(sh){
+      ctx.beginPath();
+      ctx.ellipse(sh.x,sh.y,Math.max(1,BALL_R*sh.s),Math.max(1,BALL_R*sh.s*0.5),0,0,Math.PI*2);
+      ctx.fillStyle='rgba(5,12,20,0.35)'; ctx.fill();
+    }
+  }
+  const r=Math.max(2,BALL_R*p.s);
+  const grad=ctx.createRadialGradient(p.x-r*0.35,p.y-r*0.4,r*0.15,p.x,p.y,r);
+  grad.addColorStop(0,'#ffe28a'); grad.addColorStop(1,COLORS.ball);
+  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.strokeStyle=COLORS.ballEdge; ctx.lineWidth=Math.max(1,0.05*p.s); ctx.stroke();
+  ctx.restore();
+}
+function drawLabels3(ctx,frame,alpha){
+  ctx.save();
+  ctx.globalAlpha=alpha!=null?alpha:1;
+  for(const l of frame.labels||[]){
+    const p=proj({x:l.x,y:l.y,z:0.05});
+    if(!p) continue;
+    const fs=Math.max(9,0.5*p.s);
+    ctx.font=`600 ${fs}px sans-serif`;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.8)';
+    ctx.strokeText(l.text,p.x,p.y);
+    ctx.fillStyle='#fff'; ctx.fillText(l.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+function drawTransitionAnnotations(ctx,i,alpha){
+  if(i<1||alpha<=0) return;
+  const A=play.frames[i-1], B=play.frames[i];
+  for(const pb of B.players){
+    const pa=playerIn(A,pb.id);
+    if(!pa) continue;
+    const drive=(B.drives||[]).find(d=>d.playerId===pb.id);
+    if(drive&&drive.points.length) drawDrive3(ctx,[{x:pa.x,y:pa.y},...drive.points],alpha);
+    else drawImplied3(ctx,pa,pb);
+  }
+  for(const pass of B.passes||[]){
+    const from=typeof pass.from==='string'?(playerIn(A,pass.from)||playerIn(B,pass.from)):pass.from;
+    const to=typeof pass.to==='string'?(playerIn(B,pass.to)||playerIn(A,pass.to)):pass.to;
+    if(from&&to) drawPass3(ctx,{x:from.x,y:from.y},{x:to.x,y:to.y},alpha);
+  }
+  for(const s of B.screens||[]){
+    const from=playerIn(B,s.playerId), to=playerIn(B,s.targetId);
+    if(from&&to) drawScreen3(ctx,from,to,alpha);
+  }
+}
+
+/* one full scene render; `sceneLike` = {players, ballPos, frameIndex, progress} */
+function renderScene(ctx, w, h, camState, yawOff, scene, opts){
+  opts=opts||{};
+  CV=computeView(camState,w,h,yawOff);
+  drawPoolScene(ctx);
+  drawTransitionAnnotations(ctx, scene.frameIndex, opts.annAlpha!=null?opts.annAlpha:0);
+  drawLabels3(ctx, play.frames[scene.frameIndex], 0.9);
+
+  // depth-sorted entities: goals + ghosts + players + ball
+  const L=meta().poolLengthM, W=meta().poolWidthM;
+  const ents=[];
+  const depthOf=p=>{ const c=toCamSpace(p); return c.z; };
+  ents.push({d:depthOf({x:W/2,y:0,z:0.5}), draw:()=>drawGoal3(ctx,0,1)});
+  ents.push({d:depthOf({x:W/2,y:L,z:0.5}), draw:()=>drawGoal3(ctx,L,-1)});
+  if(opts.ghosts) for(const g of opts.ghosts)
+    ents.push({d:depthOf({x:g.x,y:g.y,z:0}), draw:()=>drawPlayer3(ctx,g,{alpha:COLORS.ghost})});
+  for(const p of scene.players)
+    ents.push({d:depthOf({x:p.x,y:p.y,z:0}), draw:()=>drawPlayer3(ctx,p,{selected:opts.selectId===p.id})});
+  ents.push({d:depthOf(scene.ballPos), draw:()=>drawBall3(ctx,scene.ballPos)});
+  ents.sort((a,b)=>b.d-a.d);
+  for(const e of ents) e.draw();
+
+  if(opts.draft) drawDraft(ctx);
+  if(opts.title){
+    ctx.save();
+    ctx.font='600 14px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.75)';
+    ctx.strokeText(opts.title,10,8);
+    ctx.fillStyle='#fff'; ctx.fillText(opts.title,10,8);
+    ctx.restore();
+  }
+}
+
+function drawDraft(ctx){
+  const d=ui.draft;
+  if(!d) return;
+  if(d.kind==='drive'){
+    const pts=[d.start,...d.pts];
+    if(d.hover) pts.push(d.hover);
+    if(pts.length>=2) drawDrive3(ctx,pts,0.85);
+  }else if(d.kind==='pass'){
+    const to=d.hover||d.start;
+    if(dist(d.start,to)>0.2) drawPass3(ctx,d.start,to,0.85);
+  }else if(d.kind==='screen'){
+    const to=d.hover||d.start;
+    if(dist(d.start,to)>0.2) drawScreen3(ctx,d.start,to,0.85);
+  }
+}
+
+function renderEdit(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  const i=ui.currentFrame, f=curFrame();
+  const scene=staticScene(i);
+  if(ui.drag&&ui.drag.type==='ball') scene.ballPos={x:ui.drag.pos.x,y:ui.drag.pos.y,z:BALL_FLOAT_Z};
+  const ghosts=i>0?play.frames[i-1].players:null;
+  renderScene(cx2d,w,h,cam,0,scene,{
+    annAlpha:0.95, ghosts,
+    selectId:ui.selection&&ui.selection.type==='player'?ui.selection.id:null,
+    draft:true,
+  });
+}
+function renderAnimTo(ctx,w,h,t,camState,opts){
+  opts=opts||{};
+  const scene=sampleScene(t);
+  const yawOff=(opts.orbit?ORBIT_RATE*t:0);
+  renderScene(ctx,w,h,camState,yawOff,scene,{
+    annAlpha:scene.progress<1?0.30:0,
+    title:opts.title,
+  });
+}
+function render(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(!w||!h) return;
+  if(ui.animActive) renderAnimTo(cx2d,w,h,ui.time,cam,{orbit:ui.orbitPlay&&ui.playing});
+  else renderEdit();
+}
+
+/* ---------------- thumbnails / timeline ---------------- */
+const THUMB_H=84, THUMB_W=140;
+function thumbCam(){
+  const W=meta().poolWidthM, L=meta().poolLengthM;
+  return { target:{x:W/2,y:L*0.24}, dist:17, yaw:0, pitch:55*RAD, fov:50*RAD };
+}
+function rebuildTimeline(){
+  const tl=$('timeline');
+  tl.innerHTML='';
+  play.frames.forEach((f,i)=>{
+    const div=document.createElement('div');
+    div.className='thumb'+(i===ui.currentFrame?' cur':'');
+    div.dataset.index=i;
+    div.draggable=true;
+    const cn=document.createElement('canvas');
+    cn.width=THUMB_W*2; cn.height=THUMB_H*2;
+    cn.style.width=THUMB_W+'px'; cn.style.height=THUMB_H+'px';
+    div.appendChild(cn);
+    const cap=document.createElement('div');
+    cap.className='cap';
+    cap.innerHTML=`<span>${i+1}</span><span>${i===0?'start':(f.durationMs/1000).toFixed(1)+'s'}</span>`;
+    div.appendChild(cap);
+    if(play.frames.length>1){
+      const del=document.createElement('button');
+      del.className='del'; del.textContent='✕'; del.title='Delete frame';
+      del.addEventListener('click',e=>{ e.stopPropagation(); deleteFrame(i); });
+      div.appendChild(del);
+    }
+    div.addEventListener('click',()=>selectFrame(i));
+    div.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain',String(i)); e.dataTransfer.effectAllowed='move'; });
+    div.addEventListener('dragover',e=>{ e.preventDefault(); div.classList.add('dragover'); });
+    div.addEventListener('dragleave',()=>div.classList.remove('dragover'));
+    div.addEventListener('drop',e=>{
+      e.preventDefault(); div.classList.remove('dragover');
+      const from=parseInt(e.dataTransfer.getData('text/plain'),10);
+      if(!isNaN(from)&&from!==i) reorderFrame(from,i);
+    });
+    tl.appendChild(div);
+    drawThumb(cn,i);
+  });
+  updateScrub();
+  updatePanel();
+}
+function drawThumb(cn,i){
+  const ctx=cn.getContext('2d');
+  const scene=staticScene(i);
+  renderScene(ctx,cn.width,cn.height,thumbCam(),0,scene,{annAlpha:0.8});
+  CV=null;
+}
+function refreshThumbs(){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    const i=parseInt(div.dataset.index,10);
+    if(play.frames[i]) drawThumb(div.querySelector('canvas'),i);
+  });
+}
+function markTimelineCurrent(){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    const i=parseInt(div.dataset.index,10);
+    div.classList.toggle('cur',i===ui.currentFrame&&!ui.animActive);
+    div.classList.remove('playing');
+  });
+}
+function markTimelinePlaying(frameIndex){
+  document.querySelectorAll('#timeline .thumb').forEach(div=>{
+    div.classList.toggle('playing',parseInt(div.dataset.index,10)===frameIndex);
+  });
+}
+
+/* ---------------- frame ops ---------------- */
+function selectFrame(i){
+  stopPlayback();
+  ui.animActive=false;
+  ui.currentFrame=clamp(i,0,play.frames.length-1);
+  ui.selection=null; ui.draft=null;
+  const {segs}=timelineSegments();
+  const seg=segs.find(s=>s.i===ui.currentFrame);
+  ui.time=seg?seg.start+seg.dur:0;
+  commit(false);
+}
+function addFrame(){
+  pushUndo();
+  const f=curFrame();
+  const nf=makeFrame(deep(f.players),deep(f.ball));
+  nf.labels=deep(f.labels||[]);
+  play.frames.splice(ui.currentFrame+1,0,nf);
+  ui.currentFrame++;
+  ui.selection=null; ui.draft=null;
+  commit();
+  toast('Frame added — drag players / draw drives & passes to define what changes');
+}
+function deleteFrame(i){
+  if(play.frames.length<=1){ toast('A play needs at least one frame'); return; }
+  pushUndo();
+  play.frames.splice(i,1);
+  if(ui.currentFrame>=play.frames.length) ui.currentFrame=play.frames.length-1;
+  else if(ui.currentFrame>i) ui.currentFrame--;
+  ui.selection=null; ui.draft=null;
+  commit();
+}
+function reorderFrame(from,to){
+  pushUndo();
+  const [f]=play.frames.splice(from,1);
+  play.frames.splice(to,0,f);
+  ui.currentFrame=to;
+  commit();
+}
+
+/* ---------------- panel ---------------- */
+const HINTS={
+  select:'Drag players, the ball, or text labels. Drag open water (or right-drag anywhere) to orbit the camera; wheel zooms; shift-drag pans. Click a player to edit its cap / team.',
+  addO:'Click the pool to add a white-cap player (added to every frame).',
+  addD:'Click the pool to add a blue-cap player (added to every frame).',
+  ball:'Click a player to give them the ball, or click open water to drop it free.',
+  drive:'Press on a player and drag a swim path — or click the player, then click waypoints and double-click to finish. The player\'s position in this frame moves to the path\'s end. <kbd>Esc</kbd> cancels.',
+  pass:'Drag from the passer to a receiver (or a point in the water) — or click the passer then click the target. The ball flies this path (with a lob arc) during the transition into this frame.',
+  screen:'Click the screener, then click the player being screened.',
+  label:'Click the pool to place a text note on this frame.',
+  erase:'Click a drive, pass, screen, label, or player to remove it. Removing a player removes them from every frame.',
+};
+function updatePanel(){
+  $('frameTitle').textContent=`Frame ${ui.currentFrame+1} of ${play.frames.length}`;
+  const isFirst=ui.currentFrame===0;
+  $('durInput').disabled=isFirst;
+  $('durInput').value=curFrame().durationMs;
+  $('durRow').style.opacity=isFirst?0.45:1;
+  $('durRow').title=isFirst?'The first frame is the starting position — it has no transition.':'';
+  $('delFrameBtn').disabled=play.frames.length<=1;
+  const sel=ui.selection;
+  if(sel&&sel.type==='player'){
+    const p=playerIn(curFrame(),sel.id);
+    if(p){
+      $('selBox').style.display='';
+      $('capInput').value=p.cap;
+      $('teamInput').value=p.team;
+      $('gkInput').checked=!!p.gk;
+    }else $('selBox').style.display='none';
+  }else $('selBox').style.display='none';
+  $('hint').innerHTML=HINTS[ui.tool]||'';
+  $('playName').value=meta().name;
+  updateUndoButtons();
+}
+
+/* ---------------- commit / autosave ---------------- */
+let autosaveTimer=null;
+function commit(save){
+  fitCanvas();
+  render();
+  rebuildTimeline();
+  markTimelineCurrent();
+  if(save!==false){
+    clearTimeout(autosaveTimer);
+    autosaveTimer=setTimeout(()=>{ try{ localStorage.setItem(LS_KEY,JSON.stringify(play)); }catch(e){} },400);
+  }
+}
+function lightRender(){ render(); }
+
+/* ---------------- picking ---------------- */
+function evtScreen(e){
+  const r=canvas.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+function ensureViewForCanvas(){
+  CV=computeView(cam,canvas.clientWidth,canvas.clientHeight,0);
+}
+function evtWorld(e){
+  ensureViewForCanvas();
+  const s=evtScreen(e);
+  return screenToWater(s.x,s.y);
+}
+function maybeSnap(pt){
+  if(!ui.snap) return pt;
+  return {x:Math.round(pt.x*2)/2, y:Math.round(pt.y*2)/2};
+}
+/* screen-space player picking (caps are what you aim at in 3D) */
+function hitPlayerScreen(scrPt,frame){
+  ensureViewForCanvas();
+  let best=null, bestD=Infinity;
+  for(const p of frame.players){
+    const c=proj({x:p.x,y:p.y,z:CAP_Z});
+    if(!c) continue;
+    const r=Math.max(6,CAP_R*c.s)+5;
+    const d=Math.hypot(scrPt.x-c.x,scrPt.y-c.y);
+    if(d<=r&&c.d<bestD){ bestD=c.d; best=p; }
+  }
+  return best;
+}
+function hitBallScreen(scrPt,frame){
+  ensureViewForCanvas();
+  const b=resolveBallStatic(frame);
+  const c=proj({x:b.x,y:b.y,z:BALL_FLOAT_Z});
+  if(!c) return false;
+  return Math.hypot(scrPt.x-c.x,scrPt.y-c.y)<=Math.max(6,BALL_R*c.s)+5;
+}
+function hitLabel(pt,frame){
+  if(!pt) return null;
+  for(let i=(frame.labels||[]).length-1;i>=0;i--){
+    const l=frame.labels[i];
+    const w=Math.max(1.2,l.text.length*0.36);
+    if(pt.x>=l.x-0.3&&pt.x<=l.x+w&&Math.abs(pt.y-l.y)<=0.55) return l;
+  }
+  return null;
+}
+function hitAnnotation(pt){
+  const i=ui.currentFrame;
+  if(i<1||!pt) return null;
+  const A=play.frames[i-1], B=play.frames[i];
+  const tol=0.45;
+  for(let k=(B.drives||[]).length-1;k>=0;k--){
+    const d=B.drives[k], pa=playerIn(A,d.playerId);
+    const pts=pa?[{x:pa.x,y:pa.y},...d.points]:d.points;
+    if(pts.length>1&&pointPathDist(pt,pts)<tol) return {kind:'drive',index:k};
+  }
+  for(let k=(B.passes||[]).length-1;k>=0;k--){
+    const pass=B.passes[k];
+    const from=endpointStatic(pass.from,A)||endpointStatic(pass.from,B);
+    const to=endpointStatic(pass.to,B)||endpointStatic(pass.to,A);
+    if(from&&to){
+      const c=passCtrl(from,to), samples=[];
+      for(let t=0;t<=1.001;t+=0.1) samples.push(qBez(from,c,to,t));
+      if(pointPathDist(pt,samples)<tol) return {kind:'pass',index:k};
+    }
+  }
+  for(let k=(B.screens||[]).length-1;k>=0;k--){
+    const s=B.screens[k], from=playerIn(B,s.playerId), to=playerIn(B,s.targetId);
+    if(from&&to&&pointSegDist(pt,from,to)<tol) return {kind:'screen',index:k};
+  }
+  return null;
+}
+
+/* ---------------- pointer interaction ---------------- */
+function requireTransitionFrame(){
+  if(ui.currentFrame===0){
+    toast('This is the starting frame — click “＋ Add Frame”, then draw the movement into the new frame.');
+    return false;
+  }
+  return true;
+}
+function exitAnimToEdit(){
+  ui.animActive=false;
+  stopPlayback();
+  const scene=sampleScene(ui.time);
+  ui.currentFrame=scene.frameIndex;
+  commit(false);
+}
+
+let pDown=null;
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);
+  const scr=evtScreen(e);
+  const pt=evtWorld(e);
+  pDown={scr, client:{x:e.clientX,y:e.clientY}, moved:false};
+
+  // camera gestures first: right = orbit, middle or shift+left = pan
+  if(e.button===2){ ui.camDrag={mode:'orbit'}; return; }
+  if(e.button===1||(e.button===0&&e.shiftKey)){ ui.camDrag={mode:'pan',grab:pt}; return; }
+  if(e.button!==0) return;
+
+  // while an animation pose is shown, left-drag orbits; a plain click returns to editing
+  if(ui.animActive){ ui.camDrag={mode:'orbit',clickExits:true}; return; }
+
+  const f=curFrame();
+  if(ui.tool==='select'){
+    if(hitBallScreen(scr,f)){ pushUndo(); ui.drag={type:'ball',pos:resolveBallStatic(f)}; return; }
+    const pl=hitPlayerScreen(scr,f);
+    if(pl){
+      ui.selection={type:'player',id:pl.id}; pushUndo();
+      const off=pt?{x:pt.x-pl.x,y:pt.y-pl.y}:{x:0,y:0};
+      ui.drag={type:'player',id:pl.id,off};
+      updatePanel(); lightRender(); return;
+    }
+    const lb=hitLabel(pt,f);
+    if(lb){ pushUndo(); ui.drag={type:'label',label:lb}; return; }
+    // empty water: orbit on drag, deselect on click
+    ui.camDrag={mode:'orbit',deselects:true};
+  }
+  else if(ui.tool==='drive'){
+    if(ui.draft&&ui.draft.kind==='drive') return;
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayerScreen(scr,f);
+    if(pl) ui.draft={kind:'drive',playerId:pl.id,start:{x:pl.x,y:pl.y},pts:[],mode:'pending',hover:null};
+    else toast('Start a drive on a player');
+  }
+  else if(ui.tool==='pass'){
+    if(ui.draft&&ui.draft.kind==='pass') return;
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayerScreen(scr,f);
+    if(!pl&&!pt) return;
+    ui.draft={kind:'pass',from:pl?pl.id:{x:pt.x,y:pt.y},
+              start:pl?{x:pl.x,y:pl.y}:pt,mode:'pending',hover:null};
+  }
+  else if(ui.tool==='screen'){
+    if(ui.draft&&ui.draft.kind==='screen') return;
+    if(!requireTransitionFrame()) return;
+    const pl=hitPlayerScreen(scr,f);
+    if(pl) ui.draft={kind:'screen',playerId:pl.id,start:{x:pl.x,y:pl.y},mode:'pending',hover:null};
+    else toast('Start a screen on the screening player');
+  }
+});
+
+canvas.addEventListener('pointermove',e=>{
+  const scr=evtScreen(e);
+  if(pDown&&Math.hypot(e.clientX-pDown.client.x,e.clientY-pDown.client.y)>7) pDown.moved=true;
+
+  if(ui.camDrag){
+    if(ui.camDrag.mode==='orbit'){
+      cam.yaw+=(e.movementX||0)*0.008;
+      cam.pitch+=(e.movementY||0)*0.006;
+    }else if(ui.camDrag.mode==='pan'&&ui.camDrag.grab){
+      const now=evtWorld(e);
+      if(now){
+        cam.target.x-=now.x-ui.camDrag.grab.x;
+        cam.target.y-=now.y-ui.camDrag.grab.y;
+      }
+    }
+    clampCam();
+    lightRender();
+    return;
+  }
+
+  const pt=evtWorld(e);
+  if(ui.drag){
+    if(!pt) return;
+    const f=curFrame();
+    if(ui.drag.type==='player'){
+      const off=ui.drag.off||{x:0,y:0};
+      const sp=maybeSnap({x:pt.x-off.x,y:pt.y-off.y});
+      const pl=playerIn(f,ui.drag.id);
+      if(pl){
+        pl.x=sp.x; pl.y=sp.y;
+        const drive=(f.drives||[]).find(d=>d.playerId===pl.id);
+        if(drive&&drive.points.length) drive.points[drive.points.length-1]={x:sp.x,y:sp.y};
+      }
+    }else if(ui.drag.type==='ball'){
+      ui.drag.pos={x:pt.x,y:pt.y};
+    }else if(ui.drag.type==='label'){
+      const sp=maybeSnap(pt);
+      ui.drag.label.x=sp.x; ui.drag.label.y=sp.y;
+    }
+    lightRender();
+    return;
+  }
+  const d=ui.draft;
+  if(d){
+    if(!pt) return;
+    if(d.kind==='drive'){
+      if(d.mode==='pending'&&pDown&&pDown.moved) d.mode='freehand';
+      if(d.mode==='freehand'){
+        const last=d.pts.length?d.pts[d.pts.length-1]:d.start;
+        if(dist(last,pt)>0.25) d.pts.push({x:pt.x,y:pt.y});
+        d.hover=null;
+      }else d.hover=maybeSnap(pt);
+    }else{
+      if(d.mode==='pending'&&pDown&&pDown.moved) d.mode='dragging';
+      d.hover=pt;
+    }
+    lightRender();
+  }
+});
+
+canvas.addEventListener('pointerup',e=>{
+  const scr=evtScreen(e);
+  const pt=evtWorld(e);
+  const wasDown=pDown; pDown=null;
+  const f=curFrame();
+
+  if(ui.camDrag){
+    const cd=ui.camDrag; ui.camDrag=null;
+    if(wasDown&&!wasDown.moved){
+      if(cd.clickExits) exitAnimToEdit();
+      else if(cd.deselects){ ui.selection=null; updatePanel(); render(); }
+    }
+    return;
+  }
+  if(e.button!==0) return;
+
+  if(ui.drag){
+    if(ui.drag.type==='ball'&&pt){
+      const pl=hitPlayerScreen(scr,f);
+      f.ball=pl?{holderId:pl.id}:{x:maybeSnap(pt).x,y:maybeSnap(pt).y};
+    }
+    ui.drag=null;
+    commit();
+    return;
+  }
+
+  const d=ui.draft;
+  if(d){
+    if(!pt){ return; }
+    if(d.kind==='drive'){
+      if(d.mode==='freehand'){
+        const pts=rdp([d.start,...d.pts,{x:pt.x,y:pt.y}],0.12).slice(1);
+        if(pts.length&&pathLen([d.start,...pts])>0.6) commitDrive(d.playerId,pts);
+        ui.draft=null; commit(false); render();
+      }else if(d.mode==='pending'){
+        d.mode='click';
+      }else if(d.mode==='click'){
+        d.pts.push(maybeSnap(pt));
+        lightRender();
+      }
+    }else if(d.kind==='pass'){
+      if(d.mode==='dragging') finishPass(d,scr,pt);
+      else if(d.mode==='pending') d.mode='click';
+      else if(d.mode==='click') finishPass(d,scr,pt);
+    }else if(d.kind==='screen'){
+      if(d.mode==='dragging'||d.mode==='click'){
+        const target=hitPlayerScreen(scr,f);
+        if(target&&target.id!==d.playerId){
+          pushUndo();
+          f.screens.push({playerId:d.playerId,targetId:target.id});
+          ui.draft=null; commit();
+        }else if(d.mode==='dragging'){ ui.draft=null; toast('End the screen on a player'); render(); }
+      }else if(d.mode==='pending'){
+        d.mode='click';
+      }
+    }
+    return;
+  }
+
+  if(!wasDown||wasDown.moved||!pt) return;
+
+  if(ui.tool==='addO'||ui.tool==='addD'){
+    addPlayer(ui.tool==='addO'?'W':'B',maybeSnap(pt));
+  }
+  else if(ui.tool==='ball'){
+    pushUndo();
+    const pl=hitPlayerScreen(scr,f);
+    f.ball=pl?{holderId:pl.id}:{x:maybeSnap(pt).x,y:maybeSnap(pt).y};
+    commit();
+  }
+  else if(ui.tool==='label'){
+    const text=prompt('Label text:');
+    if(text&&text.trim()){
+      pushUndo();
+      f.labels=f.labels||[];
+      f.labels.push({x:maybeSnap(pt).x,y:maybeSnap(pt).y,text:text.trim()});
+      commit();
+    }
+  }
+  else if(ui.tool==='erase'){
+    eraseAt(scr,pt);
+  }
+});
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  cam.dist=clamp(cam.dist*Math.exp(e.deltaY*0.0012),5,80);
+  clampCam();
+  render();
+},{passive:false});
+
+canvas.addEventListener('dblclick',e=>{
+  const scr=evtScreen(e);
+  const d=ui.draft;
+  if(d&&d.kind==='drive'&&d.mode==='click'){
+    if(d.pts.length>1&&dist(d.pts[d.pts.length-1],d.pts[d.pts.length-2])<0.3) d.pts.pop();
+    if(d.pts.length&&pathLen([d.start,...d.pts])>0.4) commitDrive(d.playerId,d.pts);
+    ui.draft=null; commit(false); render();
+    return;
+  }
+  if(ui.tool==='select'&&!ui.animActive){
+    const pl=hitPlayerScreen(scr,curFrame());
+    if(pl){
+      const v=prompt('Cap number for this player:',pl.cap);
+      const n=parseInt(v,10);
+      if(!isNaN(n)&&n>0){ pushUndo(); setPlayerProp(pl.id,'cap',n); commit(); }
+    }
+  }
+});
+
+function commitDrive(playerId,pts){
+  pushUndo();
+  const f=curFrame();
+  f.drives=(f.drives||[]).filter(d=>d.playerId!==playerId);
+  const end=maybeSnap(pts[pts.length-1]);
+  pts[pts.length-1]=end;
+  f.drives.push({playerId,points:pts});
+  const pl=playerIn(f,playerId);
+  if(pl){ pl.x=end.x; pl.y=end.y; }
+  commit();
+}
+function finishPass(d,scr,pt){
+  const f=curFrame();
+  const target=hitPlayerScreen(scr,f);
+  const to=target?target.id:{x:maybeSnap(pt).x,y:maybeSnap(pt).y};
+  const from=d.from;
+  if(typeof from==='string'&&from===to){ ui.draft=null; render(); return; }
+  pushUndo();
+  f.passes.push({from,to});
+  f.ball=target?{holderId:target.id}:{x:to.x,y:to.y};
+  ui.draft=null; commit();
+}
+function eraseAt(scr,pt){
+  const f=curFrame();
+  const ann=hitAnnotation(pt);
+  if(ann){
+    pushUndo();
+    if(ann.kind==='drive') f.drives.splice(ann.index,1);
+    else if(ann.kind==='pass') f.passes.splice(ann.index,1);
+    else f.screens.splice(ann.index,1);
+    commit(); return;
+  }
+  const lb=hitLabel(pt,f);
+  if(lb){ pushUndo(); f.labels.splice(f.labels.indexOf(lb),1); commit(); return; }
+  const pl=hitPlayerScreen(scr,f);
+  if(pl){ removePlayer(pl.id); return; }
+  toast('Nothing to erase there');
+}
+
+/* ---------------- player ops ---------------- */
+function nextCap(team){
+  let m=0;
+  for(const p of curFrame().players) if(p.team===team&&!p.gk) m=Math.max(m,p.cap);
+  return m+1;
+}
+function addPlayer(team,pos){
+  pushUndo();
+  const p={id:uid('p'),team,gk:false,cap:nextCap(team),x:pos.x,y:pos.y};
+  for(const f of play.frames) f.players.push(deep(p));
+  ui.selection={type:'player',id:p.id};
+  commit();
+}
+function removePlayer(id){
+  pushUndo();
+  for(const f of play.frames){
+    const pl=playerIn(f,id);
+    f.players=f.players.filter(p=>p.id!==id);
+    f.drives=(f.drives||[]).filter(d=>d.playerId!==id);
+    f.screens=(f.screens||[]).filter(s=>s.playerId!==id&&s.targetId!==id);
+    f.passes=(f.passes||[]).filter(ps=>ps.from!==id&&ps.to!==id);
+    if(f.ball&&f.ball.holderId===id) f.ball=pl?{x:pl.x,y:pl.y}:{x:meta().poolWidthM/2,y:8};
+  }
+  if(ui.selection&&ui.selection.type==='player'&&ui.selection.id===id) ui.selection=null;
+  commit();
+}
+function setPlayerProp(id,prop,val){
+  for(const f of play.frames){
+    const p=playerIn(f,id);
+    if(p) p[prop]=val;
+  }
+}
+
+/* ---------------- playback ---------------- */
+let rafId=null, lastTs=null, holdUntil=0;
+function totalDuration(){ return timelineSegments().total; }
+function startPlayback(){
+  if(play.frames.length<2){ toast('Add a second frame to animate the play'); return; }
+  ui.playing=true; ui.animActive=true; ui.draft=null;
+  if(ui.time>=totalDuration()) ui.time=0;
+  $('playBtn').textContent='⏸ Pause';
+  lastTs=null; holdUntil=0;
+  rafId=requestAnimationFrame(tick);
+}
+function stopPlayback(){
+  ui.playing=false;
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  $('playBtn').textContent='▶ Play';
+}
+function tick(ts){
+  if(!ui.playing) return;
+  if(lastTs==null) lastTs=ts;
+  const dt=(ts-lastTs)*ui.speed; lastTs=ts;
+  const total=totalDuration();
+  if(holdUntil){
+    if(ts>=holdUntil){ holdUntil=0; ui.time=0; }
+  }else{
+    ui.time+=dt;
+    if(ui.time>=total){
+      ui.time=total;
+      if(ui.loop) holdUntil=ts+END_HOLD_MS/ui.speed;
+      else{
+        stopPlayback();
+        render(); updateScrub();
+        return;
+      }
+    }
+  }
+  render();
+  updateScrub();
+  markTimelinePlaying(sampleScene(ui.time).frameIndex);
+  rafId=requestAnimationFrame(tick);
+}
+function updateScrub(){
+  const total=Math.max(1,totalDuration());
+  const sc=$('scrub');
+  sc.max=total;
+  sc.value=clamp(ui.time,0,total);
+  $('timeStr').textContent=`${(clamp(ui.time,0,total)/1000).toFixed(1)} / ${(total/1000).toFixed(1)} s`;
+}
+$('playBtn').addEventListener('click',()=>{ ui.playing?stopPlayback():startPlayback(); if(!ui.playing) render(); });
+$('scrub').addEventListener('input',e=>{
+  ui.time=parseFloat(e.target.value);
+  ui.animActive=true;
+  render(); updateScrub();
+  markTimelinePlaying(sampleScene(ui.time).frameIndex);
+});
+$('loopToggle').addEventListener('change',e=>ui.loop=e.target.checked);
+$('speedSel').addEventListener('change',e=>ui.speed=parseFloat(e.target.value));
+$('orbitToggle').addEventListener('change',e=>ui.orbitPlay=e.target.checked);
+
+/* ---------------- toolbar / header ---------------- */
+document.querySelectorAll('#toolbar button[data-tool]').forEach(btn=>{
+  btn.addEventListener('click',()=>setTool(btn.dataset.tool));
+});
+function setTool(t){
+  ui.tool=t; ui.draft=null;
+  if(ui.animActive) exitAnimToEdit();
+  document.querySelectorAll('#toolbar button[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+  canvas.style.cursor=t==='select'?'default':'crosshair';
+  updatePanel(); render();
+}
+document.querySelectorAll('header button[data-cam]').forEach(btn=>{
+  btn.addEventListener('click',()=>setCamPreset(btn.dataset.cam));
+});
+$('undoBtn').addEventListener('click',undo);
+$('redoBtn').addEventListener('click',redo);
+$('preset66').addEventListener('click',()=>applyPreset('66'));
+$('preset42').addEventListener('click',()=>applyPreset('42'));
+$('presetClear').addEventListener('click',()=>applyPreset('clear'));
+$('playName').addEventListener('change',e=>{ pushUndo(); meta().name=e.target.value; commit(); });
+$('poolLen').addEventListener('change',e=>{
+  pushUndo();
+  const newL=parseInt(e.target.value,10), oldL=meta().poolLengthM;
+  if(newL===oldL) return;
+  const delta=newL-oldL, half=oldL/2;
+  const shiftPt=p=>{ if(p.y>half) p.y+=delta; };
+  for(const f of play.frames){
+    f.players.forEach(shiftPt);
+    (f.drives||[]).forEach(d=>d.points.forEach(shiftPt));
+    (f.passes||[]).forEach(ps=>{ if(typeof ps.from==='object') shiftPt(ps.from); if(typeof ps.to==='object') shiftPt(ps.to); });
+    (f.labels||[]).forEach(shiftPt);
+    if(f.ball&&f.ball.x!=null) shiftPt(f.ball);
+  }
+  meta().poolLengthM=newL;
+  commit();
+});
+$('lineRule').addEventListener('change',e=>{ pushUndo(); meta().sixMeterLine=e.target.value==='6'; commit(); });
+$('snapToggle').addEventListener('change',e=>{ ui.snap=e.target.checked; render(); });
+$('durInput').addEventListener('change',e=>{
+  const v=clamp(parseInt(e.target.value,10)||1000,100,20000);
+  pushUndo(); curFrame().durationMs=v; commit();
+});
+$('addFrameBtn').addEventListener('click',addFrame);
+$('addFramePanelBtn').addEventListener('click',addFrame);
+$('delFrameBtn').addEventListener('click',()=>deleteFrame(ui.currentFrame));
+$('capInput').addEventListener('change',e=>{
+  if(!ui.selection) return;
+  const n=parseInt(e.target.value,10);
+  if(!isNaN(n)&&n>0){ pushUndo(); setPlayerProp(ui.selection.id,'cap',n); commit(); }
+});
+$('teamInput').addEventListener('change',e=>{
+  if(!ui.selection) return;
+  pushUndo(); setPlayerProp(ui.selection.id,'team',e.target.value); commit();
+});
+$('gkInput').addEventListener('change',e=>{
+  if(!ui.selection) return;
+  pushUndo(); setPlayerProp(ui.selection.id,'gk',e.target.checked); commit();
+});
+$('removePlayerBtn').addEventListener('click',()=>{ if(ui.selection) removePlayer(ui.selection.id); });
+
+/* ---------------- keyboard ---------------- */
+window.addEventListener('keydown',e=>{
+  const inField=/INPUT|SELECT|TEXTAREA/.test(document.activeElement&&document.activeElement.tagName||'');
+  if((e.ctrlKey||e.metaKey)&&!inField){
+    if(e.key==='z'||e.key==='Z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+    if(e.key==='y'||e.key==='Y'){ e.preventDefault(); redo(); return; }
+  }
+  if(inField) return;
+  if(e.key==='Escape'){
+    if(ui.draft){ ui.draft=null; render(); }
+    else if(ui.selection){ ui.selection=null; updatePanel(); render(); }
+    return;
+  }
+  if(e.key===' '){ e.preventDefault(); ui.playing?stopPlayback():startPlayback(); if(!ui.playing) render(); return; }
+  if(e.key==='Enter'&&ui.draft&&ui.draft.kind==='drive'&&ui.draft.mode==='click'){
+    const d=ui.draft;
+    if(d.pts.length&&pathLen([d.start,...d.pts])>0.4) commitDrive(d.playerId,d.pts);
+    ui.draft=null; render(); return;
+  }
+  if((e.key==='Delete'||e.key==='Backspace')&&ui.selection&&ui.selection.type==='player'){
+    e.preventDefault(); removePlayer(ui.selection.id); return;
+  }
+  if((e.key==='r'||e.key==='R')&&!e.ctrlKey&&!e.metaKey){ setCamPreset('point'); return; }
+  const keyTool={v:'select',b:'ball',d:'drive',p:'pass',s:'screen',e:'erase',t:'label'}[e.key.toLowerCase()];
+  if(keyTool&&!e.ctrlKey&&!e.metaKey&&!e.altKey) setTool(keyTool);
+});
+
+/* ---------------- save / load ---------------- */
+function download(blob,filename){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+function safeName(){ return (meta().name||'play').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')||'play'; }
+$('saveBtn').addEventListener('click',()=>{
+  download(new Blob([JSON.stringify(play,null,2)],{type:'application/json'}),safeName()+'.json');
+});
+$('loadBtn').addEventListener('click',()=>$('loadFile').click());
+$('loadFile').addEventListener('change',e=>{
+  const file=e.target.files[0];
+  e.target.value='';
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      if(!data||!Array.isArray(data.frames)||!data.frames.length||!data.meta) throw new Error('bad shape');
+      pushUndo();
+      play=normalizePlay(data);
+      ui.currentFrame=0; ui.selection=null; stopPlayback(); ui.animActive=false;
+      syncHeaderControls();
+      commit();
+      toast('Play loaded');
+    }catch(err){ toast('Could not load: not a valid play file'); }
+  };
+  reader.readAsText(file);
+});
+function normalizePlay(data){
+  const p={ meta:{ name:'Play', poolLengthM:25, poolWidthM:20, sixMeterLine:true, fps:30, ...data.meta },
+            frames: data.frames.map(f=>({
+              id:f.id||uid('f'),
+              durationMs:Math.max(100,f.durationMs||1200),
+              players:(f.players||[]).map(pl=>({id:pl.id||uid('p'),team:pl.team==='B'?'B':'W',gk:!!pl.gk,cap:pl.cap||1,x:+pl.x||0,y:+pl.y||0})),
+              ball:f.ball&&f.ball.holderId?{holderId:f.ball.holderId}:{x:(f.ball&&+f.ball.x)||10,y:(f.ball&&+f.ball.y)||8},
+              drives:(f.drives||[]).filter(d=>d.playerId&&Array.isArray(d.points)),
+              passes:(f.passes||[]).filter(ps=>ps.from!=null&&ps.to!=null),
+              screens:(f.screens||[]).filter(s=>s.playerId&&s.targetId),
+              labels:(f.labels||[]).filter(l=>l.text!=null),
+            })) };
+  const nums=JSON.stringify(p).match(/"[fp](\d+)"/g)||[];
+  for(const m of nums){ const n=parseInt(m.replace(/\D/g,''),10); if(n>=idCounter) idCounter=n+1; }
+  return p;
+}
+function syncHeaderControls(){
+  $('poolLen').value=String(meta().poolLengthM===30?30:25);
+  $('lineRule').value=meta().sixMeterLine?'6':'5';
+  $('playName').value=meta().name;
+}
+
+/* ---------------- export ---------------- */
+let exportKind='gif', exportCancelled=false;
+$('gifBtn').addEventListener('click',()=>openExport('gif'));
+$('vidBtn').addEventListener('click',()=>openExport('video'));
+function openExport(kind){
+  if(play.frames.length<2){ toast('Add at least two frames before exporting an animation'); return; }
+  stopPlayback();
+  exportKind=kind;
+  $('exportTitle').textContent=kind==='gif'?'Export animated GIF':'Export WebM video';
+  $('expLoopRow').style.display=kind==='gif'?'none':'flex';
+  $('expFps').value=kind==='gif'?'15':'30';
+  $('exportModal').classList.add('show');
+}
+$('expCancel').addEventListener('click',()=>$('exportModal').classList.remove('show'));
+$('expStart').addEventListener('click',()=>{
+  $('exportModal').classList.remove('show');
+  const width=parseInt($('expWidth').value,10);
+  const fps=parseInt($('expFps').value,10);
+  const loops=parseInt($('expLoops').value,10);
+  if(exportKind==='gif') exportGIF(width,fps).catch(err=>{ closeProgress(); toast('GIF export failed: '+err.message); });
+  else exportVideo(width,fps,loops).catch(err=>{ closeProgress(); toast('Video export failed: '+err.message); });
+});
+$('progCancel').addEventListener('click',()=>{ exportCancelled=true; });
+function showProgress(title){
+  exportCancelled=false;
+  $('progTitle').textContent=title;
+  $('progBar').style.width='0%';
+  $('progText').textContent='Starting…';
+  $('progModal').classList.add('show');
+}
+function setProgress(frac,text){
+  $('progBar').style.width=(clamp(frac,0,1)*100).toFixed(1)+'%';
+  if(text) $('progText').textContent=text;
+}
+function closeProgress(){ $('progModal').classList.remove('show'); }
+const tickAsync=()=>new Promise(r=>setTimeout(r,0));
+
+function exportCanvas(width){
+  const height=Math.round(width*9/16/2)*2;   // 16:9
+  const cnv=document.createElement('canvas');
+  cnv.width=width; cnv.height=height;
+  return {cnv,ctx:cnv.getContext('2d'),width,height};
+}
+
+/* --- GIF export: gif.js from CDN when reachable, built-in GIF89a encoder otherwise --- */
+let gifLibReady=null, gifWorkerUrl=null;
+const GIF_CDN='https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js';
+const GIF_WORKER_CDN='https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js';
+function ensureGifLib(){
+  if(gifLibReady) return gifLibReady;
+  gifLibReady=(async()=>{
+    if(typeof GIF==='undefined'){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src=GIF_CDN;
+        s.onload=res;
+        s.onerror=()=>rej(new Error('could not load gif.js from CDN'));
+        document.head.appendChild(s);
+      });
+    }
+    if(!gifWorkerUrl){
+      const resp=await fetch(GIF_WORKER_CDN);
+      if(!resp.ok) throw new Error('could not fetch gif.js worker');
+      gifWorkerUrl=URL.createObjectURL(new Blob([await resp.text()],{type:'application/javascript'}));
+    }
+  })();
+  gifLibReady.catch(()=>{ gifLibReady=null; });
+  return gifLibReady;
+}
+class ByteBuf{
+  constructor(){ this.a=new Uint8Array(1<<16); this.n=0; }
+  grow(need){ while(this.a.length<this.n+need){ const b=new Uint8Array(this.a.length*2); b.set(this.a); this.a=b; } }
+  push(...bytes){ this.grow(bytes.length); for(const b of bytes) this.a[this.n++]=b; }
+  bytes(arr){ this.grow(arr.length); this.a.set(arr,this.n); this.n+=arr.length; }
+  u16(v){ this.push(v&0xff,(v>>8)&0xff); }
+  result(){ return this.a.subarray(0,this.n); }
+}
+class GifWriter{
+  constructor(w,h){
+    this.w=w; this.h=h;
+    this.out=new ByteBuf();
+    const o=this.out;
+    o.push(0x47,0x49,0x46,0x38,0x39,0x61);
+    o.u16(w); o.u16(h);
+    o.push(0x70,0,0);
+    o.push(0x21,0xFF,0x0B);
+    for(const c of 'NETSCAPE2.0') o.push(c.charCodeAt(0));
+    o.push(3,1,0,0,0);
+  }
+  addFrame(imageData,delayCs){
+    const {data}=imageData, w=this.w, h=this.h, n=w*h;
+    const counts=new Uint32Array(32768);
+    const keys=new Uint16Array(n);
+    for(let i=0,j=0;i<n;i++,j+=4){
+      const key=((data[j]&0xF8)<<7)|((data[j+1]&0xF8)<<2)|(data[j+2]>>3);
+      keys[i]=key; counts[key]++;
+    }
+    const used=[];
+    for(let k=0;k<32768;k++) if(counts[k]) used.push(k);
+    used.sort((a,b)=>counts[b]-counts[a]);
+    const palN=Math.min(256,used.length);
+    const pal=new Uint8Array(256*3);
+    const bucketIdx=new Int16Array(32768).fill(-1);
+    for(let i=0;i<palN;i++){
+      const k=used[i];
+      pal[i*3]=((k>>10)&31)<<3|4; pal[i*3+1]=((k>>5)&31)<<3|4; pal[i*3+2]=(k&31)<<3|4;
+      bucketIdx[k]=i;
+    }
+    for(let u=palN;u<used.length;u++){
+      const k=used[u];
+      const r=((k>>10)&31)<<3|4, g=((k>>5)&31)<<3|4, b=(k&31)<<3|4;
+      let best=0, bestD=Infinity;
+      for(let i=0;i<palN;i++){
+        const dr=r-pal[i*3], dg=g-pal[i*3+1], db=b-pal[i*3+2];
+        const d=dr*dr+dg*dg+db*db;
+        if(d<bestD){ bestD=d; best=i; }
+      }
+      bucketIdx[k]=best;
+    }
+    const indices=new Uint8Array(n);
+    for(let i=0;i<n;i++) indices[i]=bucketIdx[keys[i]];
+    const o=this.out;
+    o.push(0x21,0xF9,0x04,0x04); o.u16(Math.max(2,delayCs)); o.push(0,0);
+    o.push(0x2C); o.u16(0); o.u16(0); o.u16(this.w); o.u16(this.h);
+    o.push(0x87);
+    o.bytes(pal);
+    this.lzw(indices);
+  }
+  lzw(indices){
+    const o=this.out, minCode=8;
+    o.push(minCode);
+    const clear=1<<minCode, eoi=clear+1;
+    let codeSize=minCode+1, next=eoi+1;
+    let dict=new Map();
+    let cur=0, curBits=0;
+    const block=new Uint8Array(255); let blockLen=0;
+    const flushBlock=()=>{ if(blockLen){ o.push(blockLen); o.bytes(block.subarray(0,blockLen)); blockLen=0; } };
+    const emit=code=>{
+      cur|=code<<curBits; curBits+=codeSize;
+      while(curBits>=8){ block[blockLen++]=cur&0xff; cur>>>=8; curBits-=8; if(blockLen===255) flushBlock(); }
+    };
+    emit(clear);
+    let prefix=indices[0];
+    for(let i=1;i<indices.length;i++){
+      const k=indices[i], key=(prefix<<8)|k;
+      const found=dict.get(key);
+      if(found!==undefined){ prefix=found; continue; }
+      emit(prefix);
+      if(next===4096){
+        emit(clear); next=eoi+1; codeSize=minCode+1; dict=new Map();
+      }else{
+        if(next>=(1<<codeSize)) codeSize++;
+        dict.set(key,next++);
+      }
+      prefix=k;
+    }
+    emit(prefix); emit(eoi);
+    while(curBits>0){ block[blockLen++]=cur&0xff; cur>>>=8; curBits-=8; if(blockLen===255) flushBlock(); }
+    flushBlock();
+    o.push(0);
+  }
+  finish(){ this.out.push(0x3B); return this.out.result(); }
+}
+
+async function exportGIF(width,fps){
+  showProgress('Exporting GIF…');
+  setProgress(0,'Loading encoder…');
+  let useLib=true;
+  try{ await ensureGifLib(); }catch(e){ useLib=false; }
+  const {ctx,width:w,height:h}=exportCanvas(width);
+  const step=1000/fps;
+  const nFrames=Math.max(2,Math.ceil((totalDuration()+END_HOLD_MS)/step));
+  const title=meta().name;
+  const delayCs=k=>Math.round((k+1)*step/10)-Math.round(k*step/10);
+  const gif=useLib?new GIF({workers:2,quality:8,width:w,height:h,workerScript:gifWorkerUrl,repeat:0})
+                  :new GifWriter(w,h);
+  for(let k=0;k<nFrames;k++){
+    if(exportCancelled){ closeProgress(); toast('Export cancelled'); return; }
+    const t=Math.min(k*step,totalDuration());
+    renderAnimTo(ctx,w,h,t,cam,{title,orbit:ui.orbitPlay});
+    if(useLib) gif.addFrame(ctx,{copy:true,delay:delayCs(k)*10});
+    else gif.addFrame(ctx.getImageData(0,0,w,h),delayCs(k));
+    const capShare=useLib?0.5:0.95;
+    if(k%3===0){ setProgress(capShare*k/nFrames,`Rendering frame ${k+1} / ${nFrames}`); await tickAsync(); }
+  }
+  if(useLib){
+    setProgress(0.5,'Encoding GIF…');
+    await new Promise((res,rej)=>{
+      gif.on('progress',f=>{
+        if(exportCancelled){ try{gif.abort();}catch(e){} rej(new Error('cancelled')); return; }
+        setProgress(0.5+f*0.5,`Encoding… ${(f*100).toFixed(0)}%`);
+      });
+      gif.on('finished',blob=>{ download(blob,safeName()+'.gif'); res(); });
+      gif.render();
+    }).catch(err=>{ if(err.message!=='cancelled') throw err; toast('Export cancelled'); });
+  }else{
+    setProgress(0.97,'Finalizing…'); await tickAsync();
+    download(new Blob([gif.finish()],{type:'image/gif'}),safeName()+'.gif');
+  }
+  closeProgress();
+}
+
+async function exportVideo(width,fps,loops){
+  const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+    .find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
+  if(!mime) throw new Error('MediaRecorder / WebM not supported in this browser');
+  showProgress('Recording video…');
+  const {cnv,ctx,width:w,height:h}=exportCanvas(width);
+  const cycle=totalDuration()+END_HOLD_MS;
+  const durTotal=cycle*loops;
+  const title=meta().name;
+  renderAnimTo(ctx,w,h,0,cam,{title,orbit:ui.orbitPlay});
+  const stream=cnv.captureStream(fps);
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8_000_000});
+  const chunks=[];
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+  const stopped=new Promise(res=>{ rec.onstop=res; });
+  rec.start(250);
+  await new Promise(res=>{
+    const t0=performance.now();
+    function frame(now){
+      const t=now-t0;
+      if(exportCancelled||t>=durTotal){ res(); return; }
+      renderAnimTo(ctx,w,h,Math.min(t%cycle,totalDuration()),cam,{title,orbit:ui.orbitPlay});
+      setProgress(t/durTotal,`Recording… ${(t/1000).toFixed(1)} / ${(durTotal/1000).toFixed(1)} s`);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+  rec.stop();
+  await stopped;
+  closeProgress();
+  if(exportCancelled){ toast('Export cancelled'); return; }
+  if(!chunks.length) throw new Error('no video data produced');
+  download(new Blob(chunks,{type:'video/webm'}),safeName()+'.webm');
+}
+
+/* ---------------- toast ---------------- */
+let toastTimer=null;
+function toast(msg){
+  const t=$('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+/* ---------------- boot ---------------- */
+window.addEventListener('resize',()=>{ fitCanvas(); render(); });
+(function boot(){
+  newPlay();
+  let restored=false;
+  try{
+    const saved=localStorage.getItem(LS_KEY);
+    if(saved){
+      const data=JSON.parse(saved);
+      if(data&&Array.isArray(data.frames)&&data.frames.length){
+        play=normalizePlay(data);
+        restored=true;
+      }
+    }
+  }catch(e){}
+  if(!restored){
+    play.frames=[ makeFrame(buildPreset(standardSixSpots()),{holderId:'o1'}) ];
+  }
+  setCamPreset('point');
+  syncHeaderControls();
+  setTool('select');
+  commit(false);
+  if(restored) toast('Restored your last play from this browser — use the presets to start fresh');
+  window._wp={ get play(){return play;}, get ui(){return ui;}, get cam(){return cam;},
+               sampleScene, timelineSegments, selectFrame, addFrame, applyPreset, setCamPreset,
+               projectPt:(p)=>{ CV=computeView(cam,canvas.clientWidth,canvas.clientHeight,0); return proj(p); },
+               waterAt:(x,y)=>{ CV=computeView(cam,canvas.clientWidth,canvas.clientHeight,0); return screenToWater(x,y); },
+               canvas };
+})();
+</script>
+</body>
+</html>
