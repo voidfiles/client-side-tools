@@ -590,12 +590,29 @@ function timelineSegments(){
   }
   return {segs,total:acc};
 }
+/* Facing: moving players face their direction of travel; everyone else
+   faces the ball, except when it's right next to them — then attackers
+   (White) square up to the attacked goal and defenders face play. */
+function hashId(id){ let h=0; for(const c of String(id)) h=(h*31+c.charCodeAt(0))|0; return Math.abs(h); }
+function applyFacing(players, ballPos){
+  for(const p of players){
+    if(p.fx!=null) continue;
+    const def=p.team==='W'?{x:0,y:-1}:{x:0,y:1};
+    let dx=ballPos.x-p.x, dy=ballPos.y-p.y;
+    const d=Math.hypot(dx,dy);
+    if(d<1.0){ dx=def.x; dy=def.y; }
+    else{ dx/=d; dy/=d; }
+    p.fx=dx; p.fy=dy; p.speed=p.speed||0;
+  }
+  return players;
+}
 function staticScene(i){
   const f=play.frames[i];
   const b=resolveBallStatic(f);
+  const ballPos={x:b.x, y:b.y, z:BALL_FLOAT_Z};
   return { frameIndex:i, progress:1,
-    players:f.players.map(p=>({...p})),
-    ballPos:{x:b.x, y:b.y, z:BALL_FLOAT_Z} };
+    players:applyFacing(f.players.map(p=>({...p})), ballPos),
+    ballPos };
 }
 function sampleScene(t){
   const {segs,total}=timelineSegments();
@@ -637,6 +654,17 @@ function transitionScene(i,p){
     }
     ballPos={x:flat.x, y:flat.y, z:BALL_FLOAT_Z};
   }
+  // per-player velocity (finite difference) → facing + swim pose
+  const durMs=Math.max(100,B.durationMs||1000);
+  const eps=0.02;
+  for(const pl of players){
+    const q=playerPosAtRaw(i,pl.id,Math.min(1,p+eps));
+    if(!q) continue;
+    const vx=(q.x-pl.x)/(eps*durMs/1000), vy=(q.y-pl.y)/(eps*durMs/1000);
+    const sp=Math.hypot(vx,vy);
+    if(sp>0.3){ pl.fx=vx/sp; pl.fy=vy/sp; pl.speed=sp; }
+  }
+  applyFacing(players, ballPos);
   return { frameIndex:i, progress:p, players, ballPos };
 }
 
@@ -662,28 +690,44 @@ function fillPoly(ctx, scr, style){
   ctx.closePath(); ctx.fill();
 }
 function strokePath3(ctx, pts3, color, widthM, dashM, alpha){
-  const runs=projPath(pts3);
+  // subdivide long segments so per-segment widths stay perspective-correct
+  const pts=[pts3[0]];
+  for(let i=1;i<pts3.length;i++){
+    const a=pts3[i-1], b=pts3[i];
+    const d=Math.hypot(b.x-a.x, b.y-a.y, (b.z||0)-(a.z||0));
+    const n=Math.max(1,Math.ceil(d/1.0));
+    for(let k=1;k<=n;k++)
+      pts.push({x:lerp(a.x,b.x,k/n), y:lerp(a.y,b.y,k/n), z:lerp(a.z||0,b.z||0,k/n)});
+  }
+  const runs=projPath(pts);
   if(!runs.length) return null;
   ctx.save();
   if(alpha!=null) ctx.globalAlpha=alpha;
   ctx.strokeStyle=color; ctx.lineCap='round'; ctx.lineJoin='round';
-  let lastRun=null;
+  const maxW=CV.h*0.3;
   for(const run of runs){
-    let s=0; for(const p of run) s+=p.s; s/=run.length;
-    ctx.lineWidth=Math.max(1.2, widthM*s);
-    if(dashM) ctx.setLineDash([dashM[0]*s, dashM[1]*s]); else ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(run[0].x,run[0].y);
-    for(let i=1;i<run.length;i++) ctx.lineTo(run[i].x,run[i].y);
-    ctx.stroke();
-    lastRun=run;
+    let dashAcc=0;   // carry dash phase across segments so patterns stay continuous
+    for(let i=1;i<run.length;i++){
+      const a=run[i-1], b=run[i];
+      const s=(a.s+b.s)/2;
+      ctx.lineWidth=Math.min(maxW,Math.max(1.2,widthM*s));
+      if(dashM){
+        ctx.setLineDash([dashM[0]*s,dashM[1]*s]);
+        ctx.lineDashOffset=-dashAcc;
+        ctx.lineCap='butt';
+      }else{ ctx.setLineDash([]); ctx.lineCap='round'; }
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      if(dashM) dashAcc+=Math.hypot(b.x-a.x,b.y-a.y);
+    }
   }
   ctx.setLineDash([]);
+  ctx.lineDashOffset=0;
   ctx.restore();
-  return lastRun;
+  return runs[runs.length-1];
 }
 function line3(ctx,a,b,color,widthM,alpha){ strokePath3(ctx,[a,b],color,widthM,null,alpha); }
 function arrowHeadScr(ctx, tip, prev, sizePx, color, alpha){
+  sizePx=Math.min(sizePx,CV.h*0.1);
   const dx=tip.x-prev.x, dy=tip.y-prev.y, l=Math.hypot(dx,dy)||1;
   const ux=dx/l, uy=dy/l;
   ctx.save();
@@ -790,9 +834,9 @@ function drawPoolScene(ctx){
     }
     // distance labels on the deck side
     const lp=proj({x:-0.55,y:e.gl+2*e.dir,z:0});
-    if(lp&&lp.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${Math.max(8,0.5*lp.s)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('2m',lp.x,lp.y); }
+    if(lp&&lp.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${clamp(0.5*lp.s,8,34)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('2m',lp.x,lp.y); }
     const lp6=proj({x:-0.55,y:e.gl+kLine*e.dir,z:0});
-    if(lp6&&lp6.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${Math.max(8,0.5*lp6.s)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(kLine+'m',lp6.x,lp6.y); }
+    if(lp6&&lp6.s>4){ ctx.fillStyle='rgba(242,246,250,0.75)'; ctx.font=`${clamp(0.5*lp6.s,8,34)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(kLine+'m',lp6.x,lp6.y); }
   }
   strokePath3(ctx,[{x:0,y:L/2},{x:W,y:L/2}],COLORS.lineWhite,0.14);
   // pool edge
@@ -821,50 +865,128 @@ function drawGoal3(ctx, glY, dir){
   line3(ctx,{x:x1,y:back,z:0},{x:x2,y:back,z:0},'rgba(242,246,250,0.5)',0.06);
 }
 
+/* ---- human swimmer figures ----
+   Limbs are 3D polylines stroked with round caps (capsules); heads are
+   billboarded spheres. Treading pose while set; a horizontal freestyle
+   pose (with stroking arms and a kick splash) while driving. */
+const SKIN_TONES=['#e8b98a','#cf9560','#a06b3f','#7c5030'];
+function skinFor(id){ return SKIN_TONES[hashId(id)%SKIN_TONES.length]; }
+function limb(ctx,pts,color,widthM){ strokePath3(ctx,pts,color,widthM,null,null); }
+function ripple(ctx,at,rM,alpha){
+  const c=proj({x:at.x,y:at.y,z:0});
+  if(!c) return;
+  const px=proj({x:at.x+rM,y:at.y,z:0}), py=proj({x:at.x,y:at.y+rM,z:0});
+  if(!px||!py) return;
+  ctx.save();
+  ctx.globalAlpha=(alpha!=null?alpha:1)*0.5;
+  ctx.strokeStyle='rgba(235,245,252,0.7)';
+  ctx.lineWidth=Math.max(1,0.03*c.s);
+  ctx.beginPath();
+  ctx.ellipse(c.x,c.y,Math.max(1,Math.hypot(px.x-c.x,px.y-c.y)),Math.max(1,Math.hypot(py.x-c.x,py.y-c.y)),
+              Math.atan2(px.y-c.y,px.x-c.x),0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
 function drawPlayer3(ctx,p,opts){
   opts=opts||{};
   const base=proj({x:p.x,y:p.y,z:0});
   if(!base) return;
-  const px=proj({x:p.x+PLAYER_R,y:p.y,z:0}), py=proj({x:p.x,y:p.y+PLAYER_R,z:0});
-  if(!px||!py) return;
-  const rx=Math.hypot(px.x-base.x,px.y-base.y);
-  const ry=Math.hypot(py.x-base.x,py.y-base.y);
-  const rot=Math.atan2(px.y-base.y,px.x-base.x);
+  let fx=p.fx, fy=p.fy;
+  if(fx==null){ fx=0; fy=p.team==='B'?1:-1; }
+  const sx=fy, sy=-fx;                       // sideways (right of facing)
+  const skin=skinFor(p.id);
+  const suit=p.team==='W'?'#dee6ef':'#24418f';
+  const capC=p.gk?COLORS.capGK:(p.team==='W'?COLORS.capW:COLORS.capB);
+  const P=(dx,dy,z)=>({x:p.x+dx, y:p.y+dy, z});
+  const swim=(p.speed||0)>1.2;
+  const phase=((opts.animT||0)*0.007)+hashId(p.id)%7;
+
   ctx.save();
   ctx.globalAlpha=opts.alpha!=null?opts.alpha:1;
-  const isGK=p.gk;
-  const capColor=isGK?COLORS.capGK:(p.team==='W'?COLORS.capW:COLORS.capB);
-  // body / wake on the water
-  ctx.beginPath();
-  ctx.ellipse(base.x,base.y,Math.max(1,rx),Math.max(1,ry),rot,0,Math.PI*2);
-  ctx.fillStyle='rgba(8,18,28,0.35)';
-  ctx.fill();
-  ctx.lineWidth=Math.max(1,0.05*base.s);
-  ctx.strokeStyle='rgba(230,240,250,0.35)';
-  ctx.stroke();
-  // cap (billboarded sphere above water)
-  const cap=proj({x:p.x,y:p.y,z:CAP_Z});
-  if(cap){
-    const r=Math.max(2.5,CAP_R*cap.s);
-    const grad=ctx.createRadialGradient(cap.x-r*0.35,cap.y-r*0.4,r*0.15,cap.x,cap.y,r);
-    grad.addColorStop(0, isGK?'#ef6a6a':(p.team==='W'?'#ffffff':'#3d5ac0'));
-    grad.addColorStop(1, capColor);
-    ctx.beginPath(); ctx.arc(cap.x,cap.y,r,0,Math.PI*2);
+
+  // wake / water ring under the swimmer
+  ripple(ctx, p, swim?0.55:0.45, ctx.globalAlpha);
+
+  let headAt;
+  if(swim){
+    headAt=P(fx*0.42,fy*0.42,0.24);
+    // horizontal torso + hips
+    limb(ctx,[P(fx*0.25,fy*0.25,0.15),P(-fx*0.45,-fy*0.45,0.06)],suit,0.26);
+    limb(ctx,[P(-fx*0.45,-fy*0.45,0.06),P(-fx*0.72,-fy*0.72,0.03)],skin,0.14);
+    // alternating freestyle arms
+    for(const k of [0,1]){
+      const a=phase*2+k*Math.PI;
+      const shx=fx*0.18+sx*(k?0.16:-0.16), shy=fy*0.18+sy*(k?0.16:-0.16);
+      const reach=0.5*Math.cos(a);
+      const hz=Math.max(0.02,0.16+0.30*Math.sin(a));
+      limb(ctx,[P(shx,shy,0.16),P(shx+fx*reach,shy+fy*reach,hz)],skin,0.09);
+    }
+    // kick splash
+    const kick=P(-fx*0.8,-fy*0.8,0);
+    ripple(ctx,kick,0.16+0.06*Math.sin(phase*5),ctx.globalAlpha);
+    ripple(ctx,{x:kick.x-fx*0.12,y:kick.y-fy*0.12},0.10+0.05*Math.cos(phase*4),ctx.globalAlpha*0.8);
+  }else{
+    headAt=P(fx*0.05,fy*0.05,0.55);
+    // torso rising out of the water + shoulders
+    limb(ctx,[P(0,0,0.02),P(fx*0.04,fy*0.04,0.34)],suit,0.30);
+    limb(ctx,[P(sx*-0.22,sy*-0.22,0.33),P(sx*0.22,sy*0.22,0.33)],suit,0.17);
+    if(p.gk){
+      // goalkeeper blocking stance: arms up and wide
+      for(const k of [-1,1]){
+        limb(ctx,[P(sx*0.24*k,sy*0.24*k,0.32),P(sx*0.5*k,sy*0.5*k,0.5),P(sx*0.62*k,sy*0.62*k,0.72)],skin,0.09);
+      }
+    }else{
+      // sculling arms down to the water
+      for(const k of [-1,1]){
+        const hand=P(sx*0.6*k+fx*0.22, sy*0.6*k+fy*0.22, 0.03);
+        limb(ctx,[P(sx*0.24*k,sy*0.24*k,0.31),P(sx*0.48*k+fx*0.1,sy*0.48*k+fy*0.1,0.16),hand],skin,0.09);
+        ripple(ctx,hand,0.12,ctx.globalAlpha*0.8);
+      }
+    }
+  }
+
+  // head: capped sphere with the number, face patch when turned toward camera
+  const hp=proj(headAt);
+  if(hp){
+    const r=Math.max(2.5,0.23*hp.s);
+    const grad=ctx.createRadialGradient(hp.x-r*0.35,hp.y-r*0.4,r*0.15,hp.x,hp.y,r);
+    grad.addColorStop(0,p.gk?'#ef6a6a':(p.team==='W'?'#ffffff':'#3d5ac0'));
+    grad.addColorStop(1,capC);
+    ctx.beginPath(); ctx.arc(hp.x,hp.y,r,0,Math.PI*2);
     ctx.fillStyle=grad; ctx.fill();
-    ctx.lineWidth=Math.max(1,0.07*cap.s);
-    ctx.strokeStyle=isGK?(p.team==='W'?COLORS.capW:'#7f9cf5'):'rgba(10,16,22,0.65)';
+    ctx.lineWidth=Math.max(1,0.05*hp.s);
+    ctx.strokeStyle='rgba(10,16,22,0.55)';
     ctx.stroke();
-    const fs=Math.max(0,0.42*cap.s);
+    // face toward the camera side when the player is facing us
+    const vex=CV.eye.x-p.x, vey=CV.eye.y-p.y;
+    if(fx*vex+fy*vey>0){
+      const fp=proj({x:headAt.x+fx*0.15,y:headAt.y+fy*0.15,z:headAt.z-0.03});
+      if(fp){
+        ctx.beginPath(); ctx.arc(fp.x,fp.y,r*0.5,0,Math.PI*2);
+        ctx.fillStyle=skin; ctx.fill();
+      }
+    }
+    const fs=Math.max(0,0.30*hp.s);
     if(fs>=6.5){
-      ctx.fillStyle=isGK?'#fff':(p.team==='W'?COLORS.capWText:COLORS.capBText);
       ctx.font=`bold ${fs}px sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(String(p.cap),cap.x,cap.y+0.5);
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.55)';
+      ctx.strokeText(String(p.cap),hp.x,hp.y-r*0.75);
+      ctx.fillStyle=p.gk?'#ffd9d9':(p.team==='W'?'#ffffff':'#cdd9ff');
+      ctx.fillText(String(p.cap),hp.x,hp.y-r*0.75);
     }
-    if(opts.selected){
+  }
+
+  if(opts.selected){
+    const px=proj({x:p.x+PLAYER_R,y:p.y,z:0}), py=proj({x:p.x,y:p.y+PLAYER_R,z:0});
+    if(px&&py){
       ctx.setLineDash([4,3]);
       ctx.strokeStyle=COLORS.sel; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.ellipse(base.x,base.y,rx+0.2*base.s,ry+0.2*base.s,rot,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(base.x,base.y,Math.hypot(px.x-base.x,px.y-base.y)+0.2*base.s,
+                  Math.hypot(py.x-base.x,py.y-base.y)+0.2*base.s,
+                  Math.atan2(px.y-base.y,px.x-base.x),0,Math.PI*2);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -898,7 +1020,7 @@ function drawLabels3(ctx,frame,alpha){
   for(const l of frame.labels||[]){
     const p=proj({x:l.x,y:l.y,z:0.05});
     if(!p) continue;
-    const fs=Math.max(9,0.5*p.s);
+    const fs=clamp(0.5*p.s,9,40);
     ctx.font=`600 ${fs}px sans-serif`;
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.lineWidth=3; ctx.strokeStyle='rgba(6,10,14,0.8)';
@@ -946,7 +1068,7 @@ function renderScene(ctx, w, h, camState, yawOff, scene, opts){
   if(opts.ghosts) for(const g of opts.ghosts)
     ents.push({d:depthOf({x:g.x,y:g.y,z:0}), draw:()=>drawPlayer3(ctx,g,{alpha:COLORS.ghost})});
   for(const p of scene.players)
-    ents.push({d:depthOf({x:p.x,y:p.y,z:0}), draw:()=>drawPlayer3(ctx,p,{selected:opts.selectId===p.id})});
+    ents.push({d:depthOf({x:p.x,y:p.y,z:0}), draw:()=>drawPlayer3(ctx,p,{selected:opts.selectId===p.id, animT:opts.animT})});
   ents.push({d:depthOf(scene.ballPos), draw:()=>drawBall3(ctx,scene.ballPos)});
   ents.sort((a,b)=>b.d-a.d);
   for(const e of ents) e.draw();
@@ -983,7 +1105,12 @@ function renderEdit(){
   const i=ui.currentFrame, f=curFrame();
   const scene=staticScene(i);
   if(ui.drag&&ui.drag.type==='ball') scene.ballPos={x:ui.drag.pos.x,y:ui.drag.pos.y,z:BALL_FLOAT_Z};
-  const ghosts=i>0?play.frames[i-1].players:null;
+  let ghosts=null;
+  if(i>0){
+    const prev=play.frames[i-1];
+    const gb=resolveBallStatic(prev);
+    ghosts=applyFacing(prev.players.map(p=>({...p})), {x:gb.x,y:gb.y});
+  }
   renderScene(cx2d,w,h,cam,0,scene,{
     annAlpha:0.95, ghosts,
     selectId:ui.selection&&ui.selection.type==='player'?ui.selection.id:null,
@@ -997,6 +1124,7 @@ function renderAnimTo(ctx,w,h,t,camState,opts){
   renderScene(ctx,w,h,camState,yawOff,scene,{
     annAlpha:scene.progress<1?0.30:0,
     title:opts.title,
+    animT:t,
   });
 }
 function render(){
@@ -1184,9 +1312,9 @@ function hitPlayerScreen(scrPt,frame){
   ensureViewForCanvas();
   let best=null, bestD=Infinity;
   for(const p of frame.players){
-    const c=proj({x:p.x,y:p.y,z:CAP_Z});
+    const c=proj({x:p.x,y:p.y,z:0.3});   // aim at the torso/head column
     if(!c) continue;
-    const r=Math.max(6,CAP_R*c.s)+5;
+    const r=Math.max(8,0.5*c.s)+5;
     const d=Math.hypot(scrPt.x-c.x,scrPt.y-c.y);
     if(d<=r&&c.d<bestD){ bestD=c.d; best=p; }
   }
